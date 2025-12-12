@@ -2,8 +2,7 @@
 /**
  * Developer Test Tools for Champion Addon.
  *
- * WARNING: This is for developer / staging use only.
- * Do NOT enable on production/live if you don't understand what it does.
+ * WARNING: Only for staging/developer use.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -18,7 +17,6 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
          * Bootstrap
          */
         public static function init() {
-            // Add submenu under WooCommerce.
             add_action( 'admin_menu', array( __CLASS__, 'register_page' ) );
         }
 
@@ -26,7 +24,6 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
          * Register the test tools page in WP admin.
          */
         public static function register_page() {
-            // Only WooCommerce admins.
             $cap = apply_filters( 'champion_dev_test_capability', 'manage_woocommerce' );
 
             add_submenu_page(
@@ -62,7 +59,6 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                 if ( $parent_id <= 0 || $child_count <= 0 || $product_id <= 0 ) {
                     $error = 'Please select a parent ambassador, a valid product and a positive child count.';
                 } else {
-                    // Process test data creation.
                     $result = self::create_test_data( $parent_id, $child_count, $product_id );
 
                     if ( ! empty( $result['error'] ) ) {
@@ -78,9 +74,9 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                 }
             }
 
-            // Load drop-down data.
-            $ambassadors = self::get_ambassador_users();
-            $products    = self::get_products_list();
+            // Load dropdown data.
+            $users    = self::get_users_for_dropdown();
+            $products = self::get_products_list();
 
             ?>
             <div class="wrap">
@@ -105,33 +101,30 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                             </th>
                             <td>
                                 <select name="champion_parent_id" id="champion_parent_id">
-								    <option value="0">— Select User (Ambassadors marked) —</option>
-								    <?php
-								    if ( ! empty( $ambassadors ) ) {
-								        foreach ( $ambassadors as $user ) {
-								            // Check via addon filter whether this user is considered an ambassador.
-								            $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
+                                    <option value="0">— Select User (Ambassadors marked) —</option>
+                                    <?php
+                                    if ( ! empty( $users ) ) {
+                                        foreach ( $users as $user ) {
+                                            $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
+                                            $label  = $user->display_name;
 
-								            $label = $user->display_name;
+                                            if ( $is_amb ) {
+                                                $label .= ' [AMB]';
+                                            }
 
-								            if ( $is_amb ) {
-								                $label .= ' [AMB]';
-								            }
-
-								            printf(
-								                '<option value="%d">%s (ID: %d)</option>',
-								                intval( $user->ID ),
-								                esc_html( $label ),
-								                intval( $user->ID )
-								            );
-								        }
-								    }
-								    ?>
-								</select>
-								<p class="description">
-								    Users marked with <strong>[AMB]</strong> are detected as ambassadors by the Champion addon.
-								</p>
-
+                                            printf(
+                                                '<option value="%d">%s (ID: %d)</option>',
+                                                intval( $user->ID ),
+                                                esc_html( $label ),
+                                                intval( $user->ID )
+                                            );
+                                        }
+                                    }
+                                    ?>
+                                </select>
+                                <p class="description">
+                                    Users marked with <strong>[AMB]</strong> are detected as ambassadors by the Champion addon.
+                                </p>
                             </td>
                         </tr>
 
@@ -146,7 +139,7 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                                        min="1"
                                        max="100"
                                        value="10"
-                                       />
+                                />
                                 <p class="description">How many random child ambassadors should be created and attached to the selected parent.</p>
                             </td>
                         </tr>
@@ -219,7 +212,7 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                 );
             }
 
-            // Determine how many orders per child based on addon settings.
+            // Orders per child & min amount from Champion settings.
             $orders_per_child = 5;
             $min_amount       = 0;
 
@@ -240,7 +233,7 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                 );
             }
 
-            // Calculate quantity per order to meet min amount if configured.
+            // Quantity per order to meet min amount.
             $quantity = 1;
             if ( $min_amount > 0 ) {
                 $quantity = max( 1, (int) ceil( $min_amount / $price ) );
@@ -250,7 +243,6 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
             $orders_created   = 0;
 
             for ( $i = 1; $i <= $child_count; $i++ ) {
-                // Create random child ambassador user.
                 $user_id = self::create_child_user( $parent_id, $i );
                 if ( ! $user_id ) {
                     continue;
@@ -258,7 +250,6 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
 
                 $children_created++;
 
-                // Create completed orders for this child.
                 for ( $j = 1; $j <= $orders_per_child; $j++ ) {
                     $order_id = self::create_completed_order_for_user( $user_id, $product, $quantity );
                     if ( $order_id ) {
@@ -286,8 +277,8 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
             $parent_id = intval( $parent_id );
             $index     = intval( $index );
 
-            $username = sprintf( 'champion_child_%d_%d', time(), $index );
-            $email    = sprintf( 'champion_child_%d_%d@example.com', $parent_id, $index );
+            $username = sprintf( 'champ_child_%d_%d', time(), $index );
+            $email    = sprintf( 'champ_child_%d_%d@example.com', $parent_id, $index );
             $password = wp_generate_password( 12, true );
 
             $user_id = wp_insert_user(
@@ -295,7 +286,7 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                     'user_login' => $username,
                     'user_email' => $email,
                     'user_pass'  => $password,
-                    'role'       => 'ambassador', // So champion_is_user_ambassador() sees them by role.
+                    'role'       => 'ambassador', // role-based detection
                 )
             );
 
@@ -303,15 +294,29 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                 return false;
             }
 
-            // Mark as ambassador via meta as well (safer with addon options).
+            // Mark as ambassador via usermeta key used by Champion.
+            $meta_key = 'is_ambassador';
             if ( class_exists( 'Champion_Helpers' ) ) {
-                $opts     = Champion_Helpers::instance()->get_opts();
-                $meta_key = ! empty( $opts['ambassador_usermeta'] ) ? $opts['ambassador_usermeta'] : 'is_ambassador';
-                update_user_meta( $user_id, $meta_key, 1 );
+                $opts = Champion_Helpers::instance()->get_opts();
+                if ( ! empty( $opts['ambassador_usermeta'] ) ) {
+                    $meta_key = $opts['ambassador_usermeta'];
+                }
             }
+            update_user_meta( $user_id, $meta_key, 1 );
 
             // Attach parent ambassador.
             update_user_meta( $user_id, 'champion_parent_ambassador', $parent_id );
+
+            // Also add this child into parent's referred ambassadors list
+            // so the dashboard picks them up immediately.
+            $referred = get_user_meta( $parent_id, 'champion_referred_ambassadors', true );
+            if ( ! is_array( $referred ) ) {
+                $referred = array();
+            }
+            if ( ! in_array( $user_id, $referred, true ) ) {
+                $referred[] = $user_id;
+                update_user_meta( $parent_id, 'champion_referred_ambassadors', $referred );
+            }
 
             return $user_id;
         }
@@ -319,9 +324,9 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
         /**
          * Create a completed WooCommerce order for the given user & product.
          *
-         * @param int          $user_id
-         * @param WC_Product   $product
-         * @param int          $quantity
+         * @param int        $user_id
+         * @param WC_Product $product
+         * @param int        $quantity
          *
          * @return int|false order ID
          */
@@ -341,10 +346,15 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
 
                 $order->add_product( $product, $quantity );
                 $order->calculate_totals();
-
-                // Set status to completed so Champion hooks fire.
-                $order->set_status( 'completed' );
                 $order->save();
+
+                // This fires all status transition hooks, including
+                // woocommerce_order_status_completed → Champion_Milestones::on_order_completed().
+                $order->update_status(
+                    'completed',
+                    'Champion dev test: auto-completed order for milestone engine',
+                    true
+                );
 
                 return $order->get_id();
             } catch ( Exception $e ) {
@@ -353,22 +363,18 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
         }
 
         /**
-		 * Get users for dropdown.
-		 * We return all users, and mark which ones are ambassadors via the filter.
-		 *
-		 * @return WP_User[]
-		 */
-		protected static function get_ambassador_users() {
-		    $args = array(
-		        'number' => 500,
-		        'fields' => array( 'ID', 'display_name', 'user_email', 'roles' ),
-		    );
+         * Get users for dropdown (all users; mark ambassadors).
+         *
+         * @return WP_User[]
+         */
+        protected static function get_users_for_dropdown() {
+            $args = array(
+                'number' => 500,
+                'fields' => array( 'ID', 'display_name', 'user_email', 'roles' ),
+            );
 
-		    $users = get_users( $args );
-
-		    return $users;
-		}
-
+            return get_users( $args );
+        }
 
         /**
          * Get WooCommerce products for dropdown.
@@ -393,6 +399,5 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
         }
     }
 
-    // Bootstrap the dev test page.
     Champion_Dev_Test_Page::init();
 }
