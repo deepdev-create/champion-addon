@@ -2,12 +2,11 @@
 /**
  * WPLoyalty integration for Champion Addon.
  *
- * Goal:
- * - Listen on `champion_award_milestone` BEFORE default coupon handler.
+ * - Listens on `champion_award_milestone`.
  * - If "Award via WPLoyalty" enabled and WPLoyalty active:
- *      → calculate +10% amount
- *      → trigger custom action to actually credit via WPLoyalty
- *      → mark milestone as paid so coupon handler will not run.
+ *      → calculate +10% bonus
+ *      → fire `champion_wployalty_award_credit` for actual integration
+ *      → mark milestone as paid so default coupon payout will skip.
  */
 
 if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
@@ -15,12 +14,14 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
     class Champion_WPLoyalty {
 
         /**
+         * Singleton instance.
+         *
          * @var Champion_WPLoyalty|null
          */
         protected static $instance = null;
 
         /**
-         * Singleton bootstrap.
+         * Bootstrap.
          *
          * @return Champion_WPLoyalty
          */
@@ -34,9 +35,11 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
         /**
          * Constructor.
-         * Hook early on champion_award_milestone so we run BEFORE default coupon payout (priority 30).
+         *
+         * Hook early on champion_award_milestone so we can take over payout
+         * before default coupon handler (which typically runs at later priority).
          */
-        public function __construct() {
+        private function __construct() {
             add_action(
                 'champion_award_milestone',
                 array( $this, 'maybe_award_via_wployalty' ),
@@ -46,14 +49,12 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
         }
 
         /**
-         * Lightweight check to see if WPLoyalty (free or PRO) is active.
-         *
-         * We support both plugin slug check and class existence check.
+         * Check if WPLoyalty (free or PRO) is active.
          *
          * @return bool
          */
         protected function is_wployalty_active() {
-            // Check by plugin slug if function exists.
+            // If is_plugin_active is available, check by plugin slug.
             if ( function_exists( 'is_plugin_active' ) ) {
                 if (
                     is_plugin_active( 'wployalty/wployalty.php' ) ||
@@ -63,7 +64,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 }
             }
 
-            // Fallback: class-based detection.
+            // Fallback: check by class existence.
             if ( class_exists( 'WPLoyalty' ) || class_exists( 'WPLoyalty_Pro' ) ) {
                 return true;
             }
@@ -72,17 +73,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
         }
 
         /**
-         * Main handler - runs on champion_award_milestone with high priority (5).
-         *
-         * If:
-         *  - WPLoyalty enabled in settings
-         *  - WPLoyalty plugin active
-         *  - milestone row is NOT already paid/coupon-issued
-         *
-         * then we:
-         *  - calculate +10% bonus amount for store credit
-         *  - trigger champion_wployalty_award_credit for actual integration
-         *  - mark milestone as paid so default coupon handler is skipped.
+         * Handle milestone award via WPLoyalty instead of coupon.
          *
          * @param int   $parent_id
          * @param float $amount
@@ -98,15 +89,15 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 return;
             }
 
-            // Read options.
+            // Read addon settings.
             $opts = Champion_Helpers::instance()->get_opts();
 
-            // If admin has NOT enabled "Award via WPLoyalty", do nothing.
+            // If admin did not enable this, exit.
             if ( empty( $opts['award_via_wployalty'] ) ) {
                 return;
             }
 
-            // If WPLoyalty plugin is not active, do nothing.
+            // If WPLoyalty is not active, exit.
             if ( ! $this->is_wployalty_active() ) {
                 return;
             }
@@ -115,32 +106,33 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
             $milestones_table = $wpdb->prefix . 'champion_milestones';
 
-            // Load the relevant milestone row.
+            // Load relevant milestone row.
             $row = $wpdb->get_row(
                 $wpdb->prepare(
                     "SELECT * FROM {$milestones_table}
                      WHERE parent_affiliate_id = %d AND block_index = %d
-                     ORDER BY id DESC LIMIT 1",
+                     ORDER BY id DESC
+                     LIMIT 1",
                     $parent_id,
                     $block_index
                 )
             );
 
-            // If already paid or coupon already attached - do nothing.
+            // Already paid (via coupon or previous WPLoyalty payout)? Do nothing.
             if ( $row && ( intval( $row->paid ) === 1 || intval( $row->coupon_id ) > 0 ) ) {
                 return;
             }
 
-            // +10% bonus for store credit payouts (as per program).
+            // +10% bonus for store credit payouts.
             $amount_to_award = floatval( $amount ) * 1.10;
 
             /**
-             * Filter: allow integrators to tweak the final amount.
+             * Filter to tweak final amount passed to WPLoyalty.
              *
-             * @param float $amount_to_award   Amount after 10% bonus.
-             * @param int   $parent_id         Ambassador (parent) user ID.
-             * @param int   $block_index       Milestone block index.
-             * @param object|null $row         Milestone DB row (if any).
+             * @param float       $amount_to_award Amount after 10% bonus.
+             * @param int         $parent_id       Ambassador (parent) user ID.
+             * @param int         $block_index     Milestone block index.
+             * @param object|null $row             Milestone DB row (if any).
              */
             $amount_to_award = apply_filters(
                 'champion_wployalty_amount',
@@ -151,16 +143,12 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             );
 
             /**
-             * Action: champion_wployalty_award_credit
+             * Action where the store dev must actually call WPLoyalty.
              *
-             * IMPORTANT:
-             *  - THIS is where you (or the store dev) must hook and actually
-             *    talk to WPLoyalty (via PHP API or REST API) to add points/credit.
-             *
-             * Example pseudo usage in a custom plugin:
+             * Example (pseudo):
              *
              *  add_action( 'champion_wployalty_award_credit', function( $user_id, $amount, $block_index, $row ) {
-             *      // Call WPLoyalty to add points or wallet credits to $user_id.
+             *      // Call WPLoyalty's API to add wallet/points to $user_id.
              *  }, 10, 4 );
              *
              * @param int         $parent_id       Ambassador user ID.
@@ -176,7 +164,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 $row
             );
 
-            // Mark milestone as "paid" so default coupon handler will skip it.
+            // Mark milestone as paid so coupon payout handler will skip it.
             if ( $row ) {
                 $wpdb->update(
                     $milestones_table,
@@ -191,13 +179,14 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             }
         }
     }
+}
 
-    // Bootstrap the integration after plugins load.
-    add_action(
-        'plugins_loaded',
-        function () {
+// Bootstrap the integration after plugins load.
+add_action(
+    'plugins_loaded',
+    function () {
+        if ( class_exists( 'Champion_WPLoyalty' ) ) {
             Champion_WPLoyalty::instance();
         }
-    );
-
-}
+    }
+);
