@@ -21,6 +21,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/payouts.php';
 require_once CHAMPION_ADDON_PATH . 'includes/admin-settings.php';
 require_once CHAMPION_ADDON_PATH . 'includes/dashboard/ambassador-dashboard.php';
 require_once CHAMPION_ADDON_PATH . 'includes/dashboard/ambassador-signup.php';
+require_once CHAMPION_ADDON_PATH . 'includes/dev-test-page.php';
 
 
 
