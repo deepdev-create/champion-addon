@@ -10,19 +10,19 @@
  *      → mark milestone as paid so coupon handler will not run.
  */
 
-if ( ! class_exists( 'Champion_WPLoyalty_Integration' ) ) {
+if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
-    class Champion_WPLoyalty_Integration {
+    class Champion_WPLoyalty {
 
         /**
-         * @var Champion_WPLoyalty_Integration|null
+         * @var Champion_WPLoyalty|null
          */
         protected static $instance = null;
 
         /**
          * Singleton bootstrap.
          *
-         * @return Champion_WPLoyalty_Integration
+         * @return Champion_WPLoyalty
          */
         public static function instance() {
             if ( null === self::$instance ) {
@@ -196,7 +196,7 @@ if ( ! class_exists( 'Champion_WPLoyalty_Integration' ) ) {
     add_action(
         'plugins_loaded',
         function () {
-            Champion_WPLoyalty_Integration::instance();
+            Champion_WPLoyalty::instance();
         }
     );
 
