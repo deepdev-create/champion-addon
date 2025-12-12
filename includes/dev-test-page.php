@@ -105,21 +105,33 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
                             </th>
                             <td>
                                 <select name="champion_parent_id" id="champion_parent_id">
-                                    <option value="0">— Select Ambassador —</option>
-                                    <?php
-                                    if ( ! empty( $ambassadors ) ) {
-                                        foreach ( $ambassadors as $user ) {
-                                            printf(
-                                                '<option value="%d">%s (ID: %d)</option>',
-                                                intval( $user->ID ),
-                                                esc_html( $user->display_name ),
-                                                intval( $user->ID )
-                                            );
-                                        }
-                                    }
-                                    ?>
-                                </select>
-                                <p class="description">Choose the parent ambassador for whom child ambassadors & orders will be generated.</p>
+								    <option value="0">— Select User (Ambassadors marked) —</option>
+								    <?php
+								    if ( ! empty( $ambassadors ) ) {
+								        foreach ( $ambassadors as $user ) {
+								            // Check via addon filter whether this user is considered an ambassador.
+								            $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
+
+								            $label = $user->display_name;
+
+								            if ( $is_amb ) {
+								                $label .= ' [AMB]';
+								            }
+
+								            printf(
+								                '<option value="%d">%s (ID: %d)</option>',
+								                intval( $user->ID ),
+								                esc_html( $label ),
+								                intval( $user->ID )
+								            );
+								        }
+								    }
+								    ?>
+								</select>
+								<p class="description">
+								    Users marked with <strong>[AMB]</strong> are detected as ambassadors by the Champion addon.
+								</p>
+
                             </td>
                         </tr>
 
@@ -341,30 +353,22 @@ if ( ! class_exists( 'Champion_Dev_Test_Page' ) ) {
         }
 
         /**
-         * Get ambassadors for dropdown (based on champion_is_user_ambassador filter).
-         *
-         * @return WP_User[]
-         */
-        protected static function get_ambassador_users() {
-            $args = array(
-                'number' => 200,
-                'fields' => array( 'ID', 'display_name' ),
-            );
+		 * Get users for dropdown.
+		 * We return all users, and mark which ones are ambassadors via the filter.
+		 *
+		 * @return WP_User[]
+		 */
+		protected static function get_ambassador_users() {
+		    $args = array(
+		        'number' => 500,
+		        'fields' => array( 'ID', 'display_name', 'user_email', 'roles' ),
+		    );
 
-            $users       = get_users( $args );
-            $ambassadors = array();
+		    $users = get_users( $args );
 
-            if ( ! empty( $users ) ) {
-                foreach ( $users as $user ) {
-                    $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
-                    if ( $is_amb ) {
-                        $ambassadors[] = $user;
-                    }
-                }
-            }
+		    return $users;
+		}
 
-            return $ambassadors;
-        }
 
         /**
          * Get WooCommerce products for dropdown.
