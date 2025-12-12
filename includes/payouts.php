@@ -29,7 +29,11 @@ class Champion_Payouts {
         // If WPLoyalty option is enabled, we let WPLoyalty handler run first (it was hooked earlier); check if milestone row already has coupon or paid flag
         global $wpdb;
         $row = $wpdb->get_row( $wpdb->prepare("SELECT * FROM {$this->milestones_table} WHERE parent_affiliate_id = %d AND block_index = %d ORDER BY id DESC LIMIT 1", $parent_id, intval($block_index)) );
-        if ( $row && intval($row->coupon_id) > 0 ) return; // already paid
+        
+        // If row already has a coupon OR is marked as paid (eg. via WPLoyalty), skip.
+        if ( $row && ( intval( $row->coupon_id ) > 0 || intval( $row->paid ) === 1 ) ) {
+            return;
+        }
 
         $user = get_user_by('id', intval($parent_id));
         if ( ! $user ) return;
@@ -92,14 +96,25 @@ class Champion_Payouts {
         $mid = intval($_POST['milestone_id']);
         global $wpdb;
         $row = $wpdb->get_row( $wpdb->prepare("SELECT * FROM {$this->milestones_table} WHERE id = %d", $mid) );
-        if ( ! $row ) wp_die('not found');
+        
+        if ( ! $row ) {
+            wp_die('not found');
+        }
 
-        if ( intval($row->coupon_id) > 0 ) {
+        // Already paid either via coupon or external (eg. WPLoyalty)
+        if ( intval( $row->coupon_id ) > 0 || intval( $row->paid ) === 1 ) {
             wp_safe_redirect( wp_get_referer() );
             exit;
         }
 
-        do_action('champion_award_milestone', intval($row->parent_affiliate_id), floatval($row->amount), intval($row->block_index));
+        do_action(
+            'champion_award_milestone',
+            intval( $row->parent_affiliate_id ),
+            floatval( $row->amount ),
+            intval( $row->block_index )
+        );
+
+
         wp_safe_redirect( wp_get_referer() );
         exit;
     }
