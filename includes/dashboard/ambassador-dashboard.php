@@ -3,6 +3,29 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+
+function champion_get_milestone_payout_history( $parent_id, $limit = 50 ) {
+    global $wpdb;
+
+    $parent_id = intval( $parent_id );
+    $limit     = max( 1, intval( $limit ) );
+
+    $table = $wpdb->prefix . 'champion_milestones';
+
+    return $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT id, amount, block_index, milestone_children, awarded_at, paid, coupon_id, note
+             FROM {$table}
+             WHERE parent_affiliate_id = %d
+             ORDER BY id DESC
+             LIMIT %d",
+            $parent_id,
+            $limit
+        )
+    );
+}
+
+
 /**
  * Helper: Get referral & invite links for an ambassador
  *
@@ -607,6 +630,44 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 </span>
                 <span><?php echo esc_html(round($bonus_progress['progress_percent'])); ?>%</span>
             </div>
+
+            <?php 
+
+            $payouts = champion_get_milestone_payout_history( $user_id, 50 );
+
+            echo '<h3>Bonus Payout History</h3>';
+
+            if ( empty( $payouts ) ) {
+                echo '<p>No milestone payouts yet.</p>';
+            } else {
+                echo '<table class="widefat striped" style="max-width:900px">';
+                echo '<thead><tr>
+                        <th>Milestone</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Awarded</th>
+                      </tr></thead><tbody>';
+
+                foreach ( $payouts as $row ) {
+                    $status = ( intval( $row->paid ) === 1 )
+                        ? ( intval( $row->coupon_id ) > 0 ? 'Paid (Coupon)' : 'Paid (WPLoyalty)' )
+                        : 'Pending';
+
+                    $milestone_label = 'Block #' . intval( $row->block_index ) . ' (Children: ' . intval( $row->milestone_children ) . ')';
+
+                    echo '<tr>';
+                    echo '<td>' . esc_html( $milestone_label ) . '</td>';
+                    echo '<td>' . esc_html( function_exists('wc_price') ? wc_price( $row->amount ) : '$' . number_format( (float) $row->amount, 2 ) ) . '</td>';
+                    echo '<td>' . esc_html( $status ) . '</td>';
+                    echo '<td>' . esc_html( $row->awarded_at ? $row->awarded_at : '-' ) . '</td>';
+                    echo '</tr>';
+                }
+
+                echo '</tbody></table>';
+            }
+
+
+            ?>
         </div>
     </div>
 
