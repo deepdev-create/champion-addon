@@ -26,6 +26,7 @@ function champion_get_milestone_payout_history( $parent_id, $limit = 50 ) {
 }
 
 
+
 /**
  * Helper: Get referral & invite links for an ambassador
  *
@@ -640,31 +641,51 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             if ( empty( $payouts ) ) {
                 echo '<p>No milestone payouts yet.</p>';
             } else {
-                echo '<table class="widefat striped" style="max-width:900px">';
+
+                echo '<table class="widefat striped" style="max-width: 1000px;">';
                 echo '<thead><tr>
-                        <th>Milestone</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Awarded</th>
+                        <th style="width: 25%;">Milestone</th>
+                        <th style="width: 25%;">Amount</th>
+                        <th style="width: 20%;">Status</th>
+                        <th style="width: 30%;">Awarded</th>
                       </tr></thead><tbody>';
 
                 foreach ( $payouts as $row ) {
-                    $status = ( intval( $row->paid ) === 1 )
-                        ? ( intval( $row->coupon_id ) > 0 ? 'Paid (Coupon)' : 'Paid (WPLoyalty)' )
-                        : 'Pending';
 
+                    // Status
+                    $status = 'Pending';
+                    if ( intval( $row->paid ) === 1 ) {
+                        if ( intval( $row->coupon_id ) > 0 ) {
+                            $status = 'Paid (Coupon)';
+                        } else {
+                            $status = 'Paid (WPLoyalty)';
+                        }
+                    }
+
+                    // Milestone label
                     $milestone_label = 'Block #' . intval( $row->block_index ) . ' (Children: ' . intval( $row->milestone_children ) . ')';
+
+                    // Amount (wc_price returns HTML, so DO NOT esc_html it)
+                    if ( function_exists( 'wc_price' ) ) {
+                        $amount_html = wp_kses_post( wc_price( (float) $row->amount ) );
+                    } else {
+                        $amount_html = esc_html( '$' . number_format( (float) $row->amount, 2 ) );
+                    }
+
+                    // Awarded date (string from DB)
+                    $awarded = ! empty( $row->awarded_at ) ? $row->awarded_at : '-';
 
                     echo '<tr>';
                     echo '<td>' . esc_html( $milestone_label ) . '</td>';
-                    echo '<td>' . esc_html( function_exists('wc_price') ? wc_price( $row->amount ) : '$' . number_format( (float) $row->amount, 2 ) ) . '</td>';
+                    echo '<td>' . $amount_html . '</td>';
                     echo '<td>' . esc_html( $status ) . '</td>';
-                    echo '<td>' . esc_html( $row->awarded_at ? $row->awarded_at : '-' ) . '</td>';
+                    echo '<td>' . esc_html( $awarded ) . '</td>';
                     echo '</tr>';
                 }
 
                 echo '</tbody></table>';
             }
+
 
 
             ?>
