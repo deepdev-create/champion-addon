@@ -37,7 +37,13 @@ class Champion_Helpers {
             'award_via_wployalty' => false,
             'min_payout_amount' => 100.00,
             'fraud_check_same_ip' => true,
-            'fraud_check_self_referral' => true
+            'fraud_check_self_referral' => true,
+            
+            'customer_ref_cookie_days'          => 30,  // first-touch tracking validity (doc)
+            'customer_conversion_window_days'   => 30,  // must purchase within 1 month to attach (doc)
+            'customer_attachment_months'        => 6,   // attachment duration (admin can set 6-12)
+            'customer_attachment_max_months'    => 12,  // safety cap
+
         );
     }
 
