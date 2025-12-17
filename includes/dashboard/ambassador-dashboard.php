@@ -631,7 +631,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 </span>
                 <span><?php echo esc_html(round($bonus_progress['progress_percent'])); ?>%</span>
             </div>
-
+            <div style="margin-top:18px;">
             <?php 
 
             $payouts = champion_get_milestone_payout_history( $user_id, 50 );
@@ -689,6 +689,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
 
             ?>
+        </div>
         </div>
     </div>
 
