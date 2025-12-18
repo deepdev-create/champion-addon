@@ -13,10 +13,49 @@ class Champion_Customer_Referral_Link {
     public function __construct() {
         add_action( 'init', [ $this, 'capture_ref_param' ], 5 );
 
+        add_action('wp_login', [ $this, 'persist_pending_ref_for_logged_in_user' ], 10, 2);
+        add_action('user_register', [ $this, 'persist_pending_ref_on_register' ], 10, 1);
+
         // Attach on purchase confirmation statuses
         add_action( 'woocommerce_order_status_processing', [ $this, 'maybe_attach_from_link' ], 25, 1 );
         add_action( 'woocommerce_order_status_completed',  [ $this, 'maybe_attach_from_link' ], 25, 1 );
     }
+
+
+    /**
+     * If ref cookie exists and user is now known (logged-in), store it on user meta.
+     * This avoids relying on cookies during order status hooks.
+     */
+    public function persist_pending_ref_for_logged_in_user( $user_login, $user ) {
+        if ( empty($user) || empty($user->ID) ) return;
+        $this->persist_pending_ref_to_user( (int) $user->ID );
+    }
+
+    public function persist_pending_ref_on_register( $user_id ) {
+        $user_id = (int) $user_id;
+        if ( $user_id <= 0 ) return;
+        $this->persist_pending_ref_to_user( $user_id );
+    }
+
+    private function persist_pending_ref_to_user( $user_id ) {
+        // Do not overwrite if already attached
+        if ( class_exists('Champion_Attachment') ) {
+            $valid = (int) Champion_Attachment::instance()->is_customer_attached_valid( $user_id );
+            if ( $valid > 0 ) return;
+        }
+
+        [ $ref, $ts ] = $this->get_ref_from_storage();
+        if ( $ref === '' || $ts <= 0 ) return;
+
+        // Save pending values (first-touch)
+        if ( ! get_user_meta($user_id, 'champion_pending_ref', true) ) {
+            update_user_meta($user_id, 'champion_pending_ref', $ref);
+            update_user_meta($user_id, 'champion_pending_ref_ts', (int) $ts);
+        }
+    }
+
+
+
 
     /**
      * Capture ?ref=CODE and store first touch.
@@ -127,9 +166,18 @@ class Champion_Customer_Referral_Link {
         $m = $order->get_meta('champion_customer_ref_method', true);
         if ( $m === 'coupon' ) return;
 
-        // Read first touch
-        [ $ref, $ts ] = $this->get_ref_from_storage();
+        $ref = (string) get_user_meta($customer_id, 'champion_pending_ref', true);
+        $ts  = (int) get_user_meta($customer_id, 'champion_pending_ref_ts', true);
+
+
+        error_log("CHAMPION LINK DEBUG order={$order_id} user={$customer_id} pending_ref={$ref} pending_ts={$ts}");
+        
         if ( $ref === '' || $ts <= 0 ) return;
+
+
+
+
+
 
        $ambassador_id = (int) $this->resolve_ref_to_user_id( $ref );
 		if ( $ambassador_id <= 0 ) return;
@@ -160,6 +208,10 @@ class Champion_Customer_Referral_Link {
         );
 
         if ( empty($res['success']) ) return;
+
+        delete_user_meta($customer_id, 'champion_pending_ref');
+        delete_user_meta($customer_id, 'champion_pending_ref_ts');
+
 
         // Minimal order meta for reporting/debug
         $order->update_meta_data( 'champion_customer_ref_method', 'link' );
