@@ -154,12 +154,12 @@ if (!function_exists('champion_get_referred_customers')) {
 
         // Find customers attached to this ambassador
         $query = new WP_User_Query([
-            'role__in'  => ['customer', 'subscriber'],
-            'meta_key'   => 'champion_attached_ambassador',
-            'meta_value' => $user_id,
-            'number'     => 100,
-            'fields'     => 'all',
+          'meta_key'   => 'champion_attached_ambassador',
+          'meta_value' => $user_id,
+          'number'     => 100,
+          'fields'     => 'all',
         ]);
+
 
         $users = $query->get_results();
 
