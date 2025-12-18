@@ -28,8 +28,9 @@ class Champion_Customer_Referral_Link {
         $ref = sanitize_text_field( wp_unslash($_GET['ref']) );
         if ( $ref === '' ) return;
 
-        $ambassador_id = $this->resolve_ref_to_ambassador_id( $ref );
-        if ( $ambassador_id <= 0 ) return;
+        $ref_user_id = $this->resolve_ref_to_user_id( $ref );
+		if ( $ref_user_id <= 0 ) return;
+
 
         $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : [];
         $cookie_days = ! empty($opts['customer_ref_cookie_days']) ? (int) $opts['customer_ref_cookie_days'] : 30;
@@ -70,35 +71,31 @@ class Champion_Customer_Referral_Link {
     }
 
     /**
-     * Supports:
-     * - numeric ref => user ID
-     * - code ref => user_meta champion_ref_code (matches your dashboard link pattern)
-     */
-    public function resolve_ref_to_ambassador_id( $ref ) {
-        $ref = trim( (string) $ref );
-        if ( $ref === '' ) return 0;
+	 * Resolve ref to a user id.
+	 * Note: we intentionally do NOT check "is ambassador" here.
+	 * Ambassador validation happens at attach time.
+	 */
+	public function resolve_ref_to_user_id( $ref ) {
+	    $ref = trim( (string) $ref );
+	    if ( $ref === '' ) return 0;
 
-        if ( ctype_digit($ref) ) {
-            $uid = (int) $ref;
-            if ( $uid > 0 && get_user_by('id', $uid) ) {
-                return apply_filters('champion_is_user_ambassador', false, $uid) ? $uid : 0;
-            }
-        }
+	    // numeric ref => user id
+	    if ( ctype_digit($ref) ) {
+	        $uid = (int) $ref;
+	        return get_user_by('id', $uid) ? $uid : 0;
+	    }
 
-        $users = get_users([
-            'meta_key'   => 'champion_ref_code',
-            'meta_value' => $ref,
-            'number'     => 1,
-            'fields'     => 'ID',
-        ]);
+	    // code ref => user_meta champion_ref_code
+	    $users = get_users([
+	        'meta_key'   => 'champion_ref_code',
+	        'meta_value' => $ref,
+	        'number'     => 1,
+	        'fields'     => 'ID',
+	    ]);
 
-        if ( ! empty($users) ) {
-            $uid = (int) $users[0];
-            return apply_filters('champion_is_user_ambassador', false, $uid) ? $uid : 0;
-        }
+	    return ! empty($users) ? (int) $users[0] : 0;
+	}
 
-        return 0;
-    }
 
     /**
      * Attach customer if:
@@ -134,8 +131,12 @@ class Champion_Customer_Referral_Link {
         [ $ref, $ts ] = $this->get_ref_from_storage();
         if ( $ref === '' || $ts <= 0 ) return;
 
-        $ambassador_id = (int) $this->resolve_ref_to_ambassador_id( $ref );
-        if ( $ambassador_id <= 0 ) return;
+       $ambassador_id = (int) $this->resolve_ref_to_user_id( $ref );
+		if ( $ambassador_id <= 0 ) return;
+
+		// Must be ambassador (validate here, not at cookie-capture)
+		if ( ! apply_filters('champion_is_user_ambassador', false, $ambassador_id) ) return;
+
 
         // Conversion window check (doc: must buy within 1 month)
         $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : [];
