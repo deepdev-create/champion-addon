@@ -81,36 +81,32 @@ function champion_add_ambassador_role() {
 register_activation_hook( __FILE__, 'champion_add_ambassador_role' );
 
 // Mark user as Ambassador for milestones / child counting
-add_filter( 'champion_is_user_ambassador', function( $is, $user_id ) {
+add_filter('champion_is_user_ambassador', function( $is, $user_id ){
 
-    if ( $is ) {
-        return $is;
+    $user_id = (int) $user_id;
+    if ( $user_id <= 0 ) return false;
+
+    // Explicit ambassador flag
+    $flag = get_user_meta( $user_id, 'is_ambassador', true );
+    if ( $flag === 'yes' || $flag === 1 ) {
+        return true;
     }
 
-    $user_id = intval( $user_id );
-    if ( $user_id <= 0 ) {
-        return false;
-    }
-
-    // Check ambassador meta from addon options
-    if ( class_exists( 'Champion_Helpers' ) ) {
-        $opts     = Champion_Helpers::instance()->get_opts();
-        $meta_key = isset( $opts['ambassador_usermeta'] ) ? $opts['ambassador_usermeta'] : 'is_ambassador';
-
-        $flag = get_user_meta( $user_id, $meta_key, true );
-        if ( ! empty( $flag ) ) {
-            return true;
-        }
-    }
-
-    // Fallback: role check
+    // Role-based ambassador
     $user = get_user_by( 'id', $user_id );
     if ( $user && in_array( 'ambassador', (array) $user->roles, true ) ) {
         return true;
     }
 
+    // Has referral code → valid ambassador
+    $ref_code = get_user_meta( $user_id, 'champion_ref_code', true );
+    if ( ! empty( $ref_code ) ) {
+        return true;
+    }
+
     return false;
-}, 10, 2 );
+}, 10, 2);
+
 
 
 function champion_create_ambassador_table() {

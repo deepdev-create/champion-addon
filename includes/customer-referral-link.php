@@ -175,10 +175,6 @@ class Champion_Customer_Referral_Link {
         if ( $ref === '' || $ts <= 0 ) return;
 
 
-
-
-
-
        $ambassador_id = (int) $this->resolve_ref_to_user_id( $ref );
 		if ( $ambassador_id <= 0 ) return;
 
