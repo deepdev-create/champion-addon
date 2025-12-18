@@ -114,8 +114,8 @@ class Champion_Attachment {
 
 
     public function __construct(){
-        // Attach on thankyou for logged-in users; integrator should set parent_usermeta during referral flow
-        add_action('woocommerce_thankyou', array($this,'maybe_attach_customer_on_order'), 20, 1);
+      // Legacy attachment flow disabled.
+      // Customer attachment must use attach_customer_to_ambassador() from the new Customer Referral Flow (Phase 2/3).
     }
 
     /**
