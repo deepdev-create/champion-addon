@@ -26,11 +26,11 @@ class Champion_Customer_Referral_Coupon {
         $customer_id = (int) $order->get_user_id();
         if ( $customer_id <= 0 ) return;
 
-        // If customer already attached and valid, do nothing
-        if ( class_exists('Champion_Attachment') ) {
+        if ( class_exists('Champion_Attachment') && method_exists( Champion_Attachment::instance(), 'is_customer_attached_valid' ) ) {
             $valid = (int) Champion_Attachment::instance()->is_customer_attached_valid( $customer_id );
             if ( $valid > 0 ) return;
         }
+
 
         // Detect affiliate/ambassador from Coupon Affiliates PRO order meta (your helper already supports keys)
         if ( ! class_exists('Champion_Helpers') ) return;

@@ -111,6 +111,25 @@ class Champion_Attachment {
     }
 
     
+    /**
+     * Check if customer is currently attached AND not expired.
+     * Returns ambassador_id if valid, else 0.
+     */
+    public function is_customer_attached_valid( $customer_id ) {
+        $customer_id = (int) $customer_id;
+        if ( $customer_id <= 0 ) return 0;
+
+        $ambassador_id = (int) get_user_meta( $customer_id, 'champion_attached_ambassador', true );
+        if ( $ambassador_id <= 0 ) return 0;
+
+        $expires = get_user_meta( $customer_id, 'champion_attachment_expires', true );
+        if ( empty($expires) ) return 0;
+
+        $expires_ts = strtotime( (string) $expires );
+        if ( ! $expires_ts ) return 0;
+
+        return ( time() <= $expires_ts ) ? $ambassador_id : 0;
+    }
 
 
     public function __construct(){
