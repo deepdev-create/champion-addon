@@ -23,6 +23,9 @@ require_once CHAMPION_ADDON_PATH . 'includes/dashboard/ambassador-dashboard.php'
 require_once CHAMPION_ADDON_PATH . 'includes/dashboard/ambassador-signup.php';
 require_once CHAMPION_ADDON_PATH . 'includes/dev-test-page.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-coupon.php';
+require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-link.php';
+
+
 
 
 // instantiate singletons
@@ -33,6 +36,8 @@ Champion_WPLoyalty::instance();
 Champion_Payouts::instance();
 Champion_Admin::instance();
 Champion_Customer_Referral_Coupon::instance();
+Champion_Customer_Referral_Link::instance();
+
 
 /**
  * Activation: create DB tables, set defaults and schedule monthly payout job
