@@ -558,6 +558,70 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 }
 </style>
 
+
+<style>
+  .champion-card{
+    background:#fff;
+    border:1px solid rgba(0,0,0,.08);
+    border-radius:14px;
+    padding:18px 18px;
+    box-shadow:0 6px 18px rgba(0,0,0,.04);
+    margin-top:18px;
+  }
+  .champion-card-head{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:14px;
+  }
+  .champion-card-head h3{
+    margin:0;
+    font-size:22px;
+    line-height:1.2;
+  }
+  .champion-card-subtitle{
+    font-size:13px;
+    opacity:.7;
+    text-align:right;
+  }
+  .champion-metrics{
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:14px;
+  }
+  .champion-metric{
+    background:rgba(0,0,0,.03);
+    border-radius:12px;
+    padding:14px 14px;
+  }
+  .champion-metric-label{
+    font-size:12px;
+    opacity:.7;
+    margin-bottom:6px;
+  }
+  .champion-metric-value{
+    font-size:26px;
+    font-weight:700;
+    letter-spacing:-0.3px;
+  }
+
+  /* Mobile */
+  @media (max-width: 768px){
+    .champion-card-head{
+      flex-direction:column;
+      align-items:flex-start;
+    }
+    .champion-card-subtitle{
+      text-align:left;
+    }
+    .champion-metrics{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+
 <div class="champion-dashboard-wrapper">
 
     <!-- Referral Links + QR + Share -->
@@ -844,16 +908,32 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         <?php endif; ?>
     </div>
 
-    <h3>Customer Orders</h3>
+    <div class="champion-card champion-customer-orders-card">
+      <div class="champion-card-head">
+        <h3>Customer Orders</h3>
+        <div class="champion-card-subtitle">Orders and revenue from customers attached to you.</div>
+      </div>
 
-    <p><strong><?php echo esc_html( (int) ($customer_stats['orders'] ?? 0) ); ?></strong> orders</p>
+      <div class="champion-metrics">
+        <div class="champion-metric">
+          <div class="champion-metric-label">Orders</div>
+          <div class="champion-metric-value">
+            <?php echo esc_html( (int) ($customer_stats['orders'] ?? 0) ); ?>
+          </div>
+        </div>
 
-    <p><strong>
-    <?php
-      $rev = (float) ($customer_stats['revenue'] ?? 0);
-      echo function_exists('wc_price') ? wp_kses_post( wc_price($rev) ) : esc_html('$' . number_format($rev, 2));
-    ?>
-    </strong> revenue</p>
+        <div class="champion-metric">
+          <div class="champion-metric-label">Revenue</div>
+          <div class="champion-metric-value">
+            <?php
+              $rev = (float) ($customer_stats['revenue'] ?? 0);
+              echo function_exists('wc_price') ? wp_kses_post( wc_price($rev) ) : esc_html('$' . number_format($rev, 2));
+            ?>
+          </div>
+        </div>
+      </div>
+    </div>
+
 
 
     <!-- Order history + commissions -->
