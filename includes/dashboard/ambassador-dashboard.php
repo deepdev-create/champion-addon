@@ -363,6 +363,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $total_bonus    = champion_get_ambassador_total_bonus($user_id);
         $ambassadors    = champion_get_referred_ambassadors($user_id);
         $customers      = champion_get_referred_customers($user_id);
+        $customer_stats = champion_get_customer_orders_stats($user_id);
         $commissions    = champion_get_ambassador_commissions($user_id, 20);
         $bonus_progress = champion_get_bonus_progress($user_id);
 
@@ -843,15 +844,17 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         <?php endif; ?>
     </div>
 
-     <?php
-            $stats = champion_get_customer_orders_stats( $current_user_id );
-        ?>
+    <h3>Customer Orders</h3>
 
-        <div class="champion-card">
-          <h3>Customer Orders</h3>
-          <p><strong><?php echo esc_html( $stats['orders'] ); ?></strong> orders</p>
-          <p><strong><?php echo wc_price( $stats['revenue'] ); ?></strong> revenue</p>
-        </div>
+    <p><strong><?php echo esc_html( (int) ($customer_stats['orders'] ?? 0) ); ?></strong> orders</p>
+
+    <p><strong>
+    <?php
+      $rev = (float) ($customer_stats['revenue'] ?? 0);
+      echo function_exists('wc_price') ? wp_kses_post( wc_price($rev) ) : esc_html('$' . number_format($rev, 2));
+    ?>
+    </strong> revenue</p>
+
 
     <!-- Order history + commissions -->
     <div class="champion-card">
