@@ -93,7 +93,8 @@ class Champion_Customer_Commission {
         return 0;
     }
 
-    public function handle_refund( $order_id ) {
+    public function handle_refund( $order_id, $refund_id = 0 ) {
+        
         if ( ! $order_id ) return;
 
         $order = wc_get_order( $order_id );
@@ -102,9 +103,37 @@ class Champion_Customer_Commission {
         $ambassador_id = (int) $order->get_meta( 'champion_ambassador_id', true );
         if ( $ambassador_id <= 0 ) return;
 
-        // Refunds reduce commission (doc); simplest: zero it out
-        $order->update_meta_data( 'champion_commission_amount', number_format( 0, 2, '.', '' ) );
-        $order->update_meta_data( 'champion_commission_refunded', 1 );
+        $order_total = (float) $order->get_total();
+        $refunded    = (float) $order->get_total_refunded(); // total refunded so far
+
+        // Original commission baseline (preferred)
+        $orig = $order->get_meta( 'champion_commission_amount_original', true );
+        $orig_commission = (float) $orig;
+
+        // Fallback if original not stored (older orders)
+        if ( $orig === '' || $orig === null ) {
+            $orig_commission = (float) $order->get_meta( 'champion_commission_amount', true );
+        }
+
+        // If totals invalid, safest: do not change commission
+        if ( $order_total <= 0 ) return;
+
+        // Remaining ratio after refunds (clamped)
+        $remaining = max( 0.0, $order_total - $refunded );
+        $ratio = $remaining / $order_total;
+        if ( $ratio < 0 ) $ratio = 0;
+        if ( $ratio > 1 ) $ratio = 1;
+
+        $new_commission = $orig_commission * $ratio;
+
+        $order->update_meta_data( 'champion_commission_amount', number_format( $new_commission, 2, '.', '' ) );
+
+        if ( $refunded > 0 ) {
+            $order->update_meta_data( 'champion_commission_refunded', 1 );
+            $order->update_meta_data( 'champion_commission_refund_total', number_format( $refunded, 2, '.', '' ) );
+        }
+
         $order->save();
     }
+
 }
