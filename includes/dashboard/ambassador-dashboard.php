@@ -354,10 +354,10 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $user    = wp_get_current_user();
 
         // Basic role check (optional)
-        if (!in_array('ambassador', (array) $user->roles, true)) {
-            // You can relax this if ambassadors are normal customers
-            // return '<p>' . esc_html__('You are not registered as an ambassador.', 'champion-addon') . '</p>';
+        if ( ! apply_filters('champion_is_user_ambassador', false, $user_id) ) {
+          return '<p>' . esc_html__('You are not registered as an ambassador.', 'champion-addon') . '</p>';
         }
+
 
         $links          = champion_get_ambassador_referral_links($user_id);
         $total_bonus    = champion_get_ambassador_total_bonus($user_id);
@@ -915,23 +915,25 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
       </div>
 
       <div class="champion-metrics">
-        <div class="champion-metric">
-          <div class="champion-metric-label">Orders</div>
-          <div class="champion-metric-value">
-            <?php echo esc_html( (int) ($customer_stats['orders'] ?? 0) ); ?>
+          <div class="champion-metric">
+            <div class="champion-metric-label">Orders</div>
+            <div class="champion-metric-value">
+              <?php echo esc_html( (int) ($customer_stats['orders'] ?? 0) ); ?>
+            </div>
+          </div>
+
+          <div class="champion-metric">
+            <div class="champion-metric-label">Revenue</div>
+            <div class="champion-metric-value">
+              <?php
+                $rev = (float) ($customer_stats['revenue'] ?? 0);
+                echo function_exists('wc_price') ? wp_kses_post( wc_price($rev) ) : esc_html('$' . number_format($rev, 2));
+              ?>
+            </div>
           </div>
         </div>
 
-        <div class="champion-metric">
-          <div class="champion-metric-label">Revenue</div>
-          <div class="champion-metric-value">
-            <?php
-              $rev = (float) ($customer_stats['revenue'] ?? 0);
-              echo function_exists('wc_price') ? wp_kses_post( wc_price($rev) ) : esc_html('$' . number_format($rev, 2));
-            ?>
-          </div>
-        </div>
-      </div>
+      
     </div>
 
 
