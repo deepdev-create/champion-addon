@@ -215,7 +215,13 @@ if (!function_exists('champion_get_referred_customers')) {
 
                 // Get last order
                 $last_order = wc_get_customer_last_order($customer_id);
-                $last_date  = $last_order ? $last_order->get_date_created()->date_i18n(get_option('date_format')) : '';
+               
+                $last_date = '';
+                if ( $last_order ) {
+                    $dc = $last_order->get_date_created();
+                    $last_date = $dc ? $dc->date_i18n( get_option('date_format') ) : '';
+                }
+
 
                 $customers[] = [
                     'id'           => $customer_id,
@@ -269,7 +275,11 @@ if (!function_exists('champion_get_ambassador_commissions')) {
             $commission    = $commission !== '' ? (float) $commission : 0;
             $status        = wc_get_order_status_name($order->get_status());
             $total         = $order->get_total();
-            $order_date    = $order->get_date_created() ? $order->get_date_created()->date_i18n(get_option('date_format')) : '';
+            
+            $dc = $order->get_date_created();
+            $order_date = $dc ? $dc->date_i18n( get_option('date_format') ) : '';
+
+            
             $customer_name = $order->get_formatted_billing_full_name();
 
             $data[] = [
@@ -933,7 +943,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
           </div>
         </div>
 
-      
+
     </div>
 
 
