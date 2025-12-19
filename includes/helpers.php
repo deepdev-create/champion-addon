@@ -43,6 +43,10 @@ class Champion_Helpers {
             'customer_conversion_window_days'   => 30,  // must purchase within 1 month to attach (doc)
             'customer_attachment_months'        => 6,   // attachment duration (admin can set 6-12)
             'customer_attachment_max_months'    => 12,  // safety cap
+            // Customer order commission (Ambassador -> Customers)
+            'customer_order_commission_type'  => 'percent', // percent|fixed
+            'customer_order_commission_value' => 0,         // default 0 to avoid guessing
+
 
         );
     }

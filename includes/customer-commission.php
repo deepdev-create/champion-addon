@@ -35,12 +35,25 @@ class Champion_Customer_Commission {
         // Only allow valid ambassadors (consistent with project-wide gate)
         if ( ! apply_filters('champion_is_user_ambassador', false, $ambassador_id) ) return;
 
-        // Commission rate not defined in docs; keep calculation filter-based (Step 2 will add admin settings)
+        $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : [];
+
+        $type  = ! empty($opts['customer_order_commission_type']) ? (string) $opts['customer_order_commission_type'] : 'percent';
+        $value = isset($opts['customer_order_commission_value']) ? (float) $opts['customer_order_commission_value'] : 0;
+
+        $order_total = (float) $order->get_total();
+
         $commission = 0.0;
+        if ( $value > 0 ) {
+            if ( $type === 'fixed' ) {
+                $commission = $value;
+            } else {
+                // percent
+                $commission = ( $order_total * $value ) / 100;
+            }
+        }
 
         /**
-         * Filter: allow integrator/admin logic to define commission amount for a customer order.
-         * Return a float amount.
+         * Filter: allow overrides (e.g., exclude shipping/tax, tiered commission, etc.)
          */
         $commission = (float) apply_filters( 'champion_customer_order_commission_amount', $commission, $order, $ambassador_id );
 
