@@ -168,9 +168,7 @@ class Champion_Customer_Referral_Link {
 
         $ref = (string) get_user_meta($customer_id, 'champion_pending_ref', true);
         $ts  = (int) get_user_meta($customer_id, 'champion_pending_ref_ts', true);
-
-
-        error_log("CHAMPION LINK DEBUG order={$order_id} user={$customer_id} pending_ref={$ref} pending_ts={$ts}");
+        
         
         if ( $ref === '' || $ts <= 0 ) return;
 

@@ -133,7 +133,3 @@ register_activation_hook(__FILE__, 'champion_create_ambassador_table');
 
 
 
-add_action('woocommerce_order_status_processing', function($order_id){
-    $order = wc_get_order($order_id);
-    error_log('CHAMPION DEBUG order '.$order_id.' user_id='.$order->get_user_id().' ref_method='.$order->get_meta('champion_customer_ref_method', true));
-}, 5);
