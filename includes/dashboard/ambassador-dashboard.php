@@ -215,12 +215,21 @@ if (!function_exists('champion_get_referred_customers')) {
 
                 // Get last order
                 $last_order = wc_get_customer_last_order($customer_id);
-               
+
+                // If Woo returns a refund object as "last order", switch to its parent order
+                if ( $last_order && is_a($last_order, 'WC_Order_Refund') && method_exists($last_order, 'get_parent_id') ) {
+                    $parent_id = (int) $last_order->get_parent_id();
+                    if ( $parent_id > 0 ) {
+                        $last_order = wc_get_order( $parent_id );
+                    }
+                }
+
                 $last_date = '';
                 if ( $last_order ) {
                     $dc = $last_order->get_date_created();
                     $last_date = $dc ? $dc->date_i18n( get_option('date_format') ) : '';
                 }
+
 
 
                 $customers[] = [
@@ -267,6 +276,15 @@ if (!function_exists('champion_get_ambassador_commissions')) {
         ]);
 
         $data = [];
+
+        // Skip refund objects to prevent dashboard fatals after full refunds
+        if ( is_a($order, 'WC_Order_Refund') ) {
+            continue;
+        }
+        if ( method_exists($order, 'get_type') && $order->get_type() === 'shop_order_refund' ) {
+            continue;
+        }
+
 
         foreach ($orders as $order) {
             /** @var WC_Order $order */
