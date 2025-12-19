@@ -797,18 +797,11 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             <div class="champion-card-subtitle">
                 <?php echo esc_html__('Customers attached to you via your referral link or coupon.', 'champion-addon'); ?>
             </div>
-            <?php
-
-                        $stats = champion_get_customer_orders_stats( $current_user_id );
-            ?>
-
-            <div class="champion-card">
-              <h3>Customer Orders</h3>
-              <p><strong><?php echo esc_html( $stats['orders'] ); ?></strong> orders</p>
-              <p><strong><?php echo wc_price( $stats['revenue'] ); ?></strong> revenue</p>
-            </div>
+            
 
         </div>
+
+       
 
         <?php if (!empty($customers)) : ?>
             <div style="overflow-x:auto;">
@@ -849,6 +842,16 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             </p>
         <?php endif; ?>
     </div>
+
+     <?php
+            $stats = champion_get_customer_orders_stats( $current_user_id );
+        ?>
+
+        <div class="champion-card">
+          <h3>Customer Orders</h3>
+          <p><strong><?php echo esc_html( $stats['orders'] ); ?></strong> orders</p>
+          <p><strong><?php echo wc_price( $stats['revenue'] ); ?></strong> revenue</p>
+        </div>
 
     <!-- Order history + commissions -->
     <div class="champion-card">
