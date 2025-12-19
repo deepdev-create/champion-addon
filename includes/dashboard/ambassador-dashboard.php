@@ -4,6 +4,46 @@ if (!defined('ABSPATH')) {
 }
 
 
+function champion_get_customer_orders_stats( $ambassador_id ) {
+    $ambassador_id = (int) $ambassador_id;
+    if ( $ambassador_id <= 0 ) {
+        return ['orders' => 0, 'revenue' => 0];
+    }
+
+    // Get attached customers
+    $users = get_users([
+        'meta_key'   => 'champion_attached_ambassador',
+        'meta_value' => $ambassador_id,
+        'fields'     => 'ID',
+    ]);
+
+    if ( empty($users) ) {
+        return ['orders' => 0, 'revenue' => 0];
+    }
+
+    $order_count = 0;
+    $revenue     = 0.0;
+
+    foreach ( $users as $uid ) {
+        $orders = wc_get_orders([
+            'customer_id' => $uid,
+            'status'      => ['processing','completed'],
+            'limit'       => -1,
+        ]);
+
+        foreach ( $orders as $order ) {
+            $order_count++;
+            $revenue += (float) $order->get_total();
+        }
+    }
+
+    return [
+        'orders'  => $order_count,
+        'revenue' => $revenue,
+    ];
+}
+
+
 function champion_get_milestone_payout_history( $parent_id, $limit = 50 ) {
     global $wpdb;
 
@@ -757,6 +797,17 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             <div class="champion-card-subtitle">
                 <?php echo esc_html__('Customers attached to you via your referral link or coupon.', 'champion-addon'); ?>
             </div>
+            <?php
+
+                        $stats = champion_get_customer_orders_stats( $current_user_id );
+            ?>
+
+            <div class="champion-card">
+              <h3>Customer Orders</h3>
+              <p><strong><?php echo esc_html( $stats['orders'] ); ?></strong> orders</p>
+              <p><strong><?php echo wc_price( $stats['revenue'] ); ?></strong> revenue</p>
+            </div>
+
         </div>
 
         <?php if (!empty($customers)) : ?>
