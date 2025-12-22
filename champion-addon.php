@@ -90,26 +90,38 @@ add_filter('champion_is_user_ambassador', function( $is, $user_id ){
     $user_id = (int) $user_id;
     if ( $user_id <= 0 ) return false;
 
-    // Explicit ambassador flag
+    // 1. Explicit Champion ambassador flag
     $flag = get_user_meta( $user_id, 'is_ambassador', true );
     if ( $flag === 'yes' || $flag === 1 ) {
         return true;
     }
 
-    // Role-based ambassador
+    // 2. Role-based ambassador (Champion role OR Coupon Affiliates role)
     $user = get_user_by( 'id', $user_id );
-    if ( $user && in_array( 'ambassador', (array) $user->roles, true ) ) {
-        return true;
+    if ( $user ) {
+        $roles = (array) $user->roles;
+
+        // Champion ambassador role
+        if ( in_array( 'ambassador', $roles, true ) ) {
+            return true;
+        }
+
+        // Coupon Affiliates PRO ambassador role
+        if ( in_array( 'coupon_affiliate_ambassador', $roles, true ) ) {
+            return true;
+        }
     }
 
-    // Has referral code → valid ambassador
+    // 3. Has Champion referral code → valid ambassador
     $ref_code = get_user_meta( $user_id, 'champion_ref_code', true );
     if ( ! empty( $ref_code ) ) {
         return true;
     }
 
     return false;
+    
 }, 10, 2);
+
 
 
 

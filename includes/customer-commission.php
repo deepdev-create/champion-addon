@@ -57,6 +57,38 @@ class Champion_Customer_Commission {
          */
         $commission = (float) apply_filters( 'champion_customer_order_commission_amount', $commission, $order, $ambassador_id );
 
+
+        $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : [];
+
+        $type  = ! empty($opts['customer_order_commission_type']) ? (string) $opts['customer_order_commission_type'] : 'percent';
+        $value = isset($opts['customer_order_commission_value']) ? (float) $opts['customer_order_commission_value'] : 0;
+
+        $order_total = (float) $order->get_total();
+
+        // Default commission (Champion settings)
+        $commission = 0.0;
+        if ( $value > 0 ) {
+            if ( $type === 'fixed' ) {
+                $commission = $value;
+            } else {
+                $commission = ( $order_total * $value ) / 100;
+            }
+        }
+
+        // If Coupon Affiliates PRO already computed commission on this order, mirror it
+        $wcusage_comm = $order->get_meta('wcusage_total_commission', true);
+        if ( $wcusage_comm !== '' && $wcusage_comm !== null ) {
+            $commission = (float) $wcusage_comm;
+        }
+
+        /**
+         * Filter: allow overrides
+         */
+        $commission = (float) apply_filters( 'champion_customer_order_commission_amount', $commission, $order, $ambassador_id );
+
+
+
+
         // Persist meta used by dashboard history
         $order->update_meta_data( 'champion_ambassador_id', $ambassador_id );
         $order->update_meta_data( 'champion_commission_amount', number_format( $commission, 2, '.', '' ) );
