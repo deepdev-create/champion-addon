@@ -277,17 +277,21 @@ if (!function_exists('champion_get_ambassador_commissions')) {
 
         $data = [];
 
-        // Skip refund objects to prevent dashboard fatals after full refunds
-        if ( is_a($order, 'WC_Order_Refund') ) {
-            continue;
-        }
-        if ( method_exists($order, 'get_type') && $order->get_type() === 'shop_order_refund' ) {
-            continue;
-        }
+
 
 
         foreach ($orders as $order) {
             /** @var WC_Order $order */
+
+
+            // Skip refund objects to prevent dashboard fatals after full refunds
+            if ( is_a($order, 'WC_Order_Refund') ) {
+                continue;
+            }
+            if ( method_exists($order, 'get_type') && $order->get_type() === 'shop_order_refund' ) {
+                continue;
+            }
+        
             $order_id      = $order->get_id();
             $commission    = get_post_meta($order_id, 'champion_commission_amount', true);
             $commission    = $commission !== '' ? (float) $commission : 0;
