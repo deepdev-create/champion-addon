@@ -33,6 +33,62 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             return self::$instance;
         }
 
+
+        private function award_points_via_wployalty_rest( $user_id, $amount ) {
+
+            $user_id = (int) $user_id;
+            if ( $user_id <= 0 ) return false;
+
+            $user = get_user_by( 'id', $user_id );
+            if ( ! $user || empty( $user->user_email ) ) return false;
+
+            // WPLoyalty expects integer points
+            $points = (int) round( (float) $amount );
+            if ( $points <= 0 ) return false;
+
+            // Cron runs without current user; REST permissions may require an admin.
+            $old_user = get_current_user_id();
+
+            $admins = get_users( array(
+                'role'    => 'administrator',
+                'orderby' => 'ID',
+                'order'   => 'ASC',
+                'number'  => 1,
+                'fields'  => array( 'ID' ),
+            ) );
+
+            if ( ! empty( $admins[0]->ID ) ) {
+                wp_set_current_user( (int) $admins[0]->ID );
+            }
+
+            // Internal REST request to WPLoyalty
+            $request = new WP_REST_Request( 'POST', '/wc/v3/wployalty/customers/points/add' );
+            $request->set_param( 'user_email', $user->user_email );
+            $request->set_param( 'points', $points );
+
+            $response = rest_do_request( $request );
+
+            // Restore context
+            if ( $old_user ) {
+                wp_set_current_user( (int) $old_user );
+            } else {
+                wp_set_current_user( 0 );
+            }
+
+            if ( is_wp_error( $response ) ) {
+                return false;
+            }
+
+            $status = (int) $response->get_status();
+            if ( $status < 200 || $status >= 300 ) {
+                return false;
+            }
+
+            return true;
+        }
+
+
+
         /**
          * Constructor.
          *
@@ -82,6 +138,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
          * @return void
          */
         public function maybe_award_via_wployalty( $parent_id, $amount, $block_index ) {
+
             $parent_id   = intval( $parent_id );
             $block_index = intval( $block_index );
 
@@ -128,11 +185,6 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
             /**
              * Filter to tweak final amount passed to WPLoyalty.
-             *
-             * @param float       $amount_to_award Amount after 10% bonus.
-             * @param int         $parent_id       Ambassador (parent) user ID.
-             * @param int         $block_index     Milestone block index.
-             * @param object|null $row             Milestone DB row (if any).
              */
             $amount_to_award = apply_filters(
                 'champion_wployalty_amount',
@@ -143,18 +195,26 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             );
 
             /**
-             * Action where the store dev must actually call WPLoyalty.
-             *
-             * Example (pseudo):
-             *
-             *  add_action( 'champion_wployalty_award_credit', function( $user_id, $amount, $block_index, $row ) {
-             *      // Call WPLoyalty's API to add wallet/points to $user_id.
-             *  }, 10, 4 );
-             *
-             * @param int         $parent_id       Ambassador user ID.
-             * @param float       $amount_to_award Final amount (with bonus).
-             * @param int         $block_index     Milestone block index.
-             * @param object|null $row             Milestone DB row.
+             * 1) Default implementation: award via WPLoyalty REST (points add)
+             * Returns true on success.
+             */
+            $awarded = $this->award_points_via_wployalty_rest( $parent_id, $amount_to_award );
+
+            /**
+             * 2) Allow store/dev override to confirm award happened
+             * (e.g. if they use wallet credit instead of points)
+             */
+            $awarded = (bool) apply_filters(
+                'champion_wployalty_awarded',
+                $awarded,
+                $parent_id,
+                $amount_to_award,
+                $block_index,
+                $row
+            );
+
+            /**
+             * 3) Keep the old action for backward compatibility
              */
             do_action(
                 'champion_wployalty_award_credit',
@@ -164,20 +224,37 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 $row
             );
 
-            // Mark milestone as paid so coupon payout handler will skip it.
+            /**
+             * Mark milestone as paid ONLY if award succeeded.
+             * If award fails, keep unpaid so coupon payout handler can process it.
+             */
             if ( $row ) {
-                $wpdb->update(
-                    $milestones_table,
-                    array(
-                        'paid' => 1,
-                        'note' => 'wployalty_credit',
-                    ),
-                    array( 'id' => $row->id ),
-                    array( '%d', '%s' ),
-                    array( '%d' )
-                );
+                if ( $awarded ) {
+                    $wpdb->update(
+                        $milestones_table,
+                        array(
+                            'paid' => 1,
+                            'note' => 'wployalty_points_added',
+                        ),
+                        array( 'id' => $row->id ),
+                        array( '%d', '%s' ),
+                        array( '%d' )
+                    );
+                } else {
+                    // store note for debugging; do NOT mark paid
+                    $wpdb->update(
+                        $milestones_table,
+                        array(
+                            'note' => 'wployalty_failed_fallback_to_coupon',
+                        ),
+                        array( 'id' => $row->id ),
+                        array( '%s' ),
+                        array( '%d' )
+                    );
+                }
             }
         }
+
     }
 }
 
