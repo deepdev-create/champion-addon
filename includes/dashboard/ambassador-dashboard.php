@@ -4,6 +4,69 @@ if (!defined('ABSPATH')) {
 }
 
 
+function champion_get_ambassador_commission_totals( $ambassador_id ) {
+
+    $ambassador_id = (int) $ambassador_id;
+    if ( $ambassador_id <= 0 ) {
+        return [
+            'lifetime' => 0,
+            'this_month' => 0,
+            'paid' => 0,
+        ];
+    }
+
+    $args = [
+        'limit'      => -1,
+        'status'     => ['processing', 'completed', 'refunded'],
+        'meta_query' => [
+            [
+                'key'   => 'champion_ambassador_id',
+                'value' => $ambassador_id,
+            ]
+        ],
+        'return' => 'objects',
+    ];
+
+    $orders = wc_get_orders( $args );
+
+    $lifetime = 0;
+    $this_month = 0;
+
+    $month_start = strtotime( date('Y-m-01 00:00:00') );
+
+    foreach ( $orders as $order ) {
+
+        if ( is_a( $order, 'WC_Order_Refund' ) ) {
+            continue;
+        }
+
+        $commission = (float) $order->get_meta( 'champion_commission_amount', true );
+        if ( $commission <= 0 ) {
+            continue;
+        }
+
+        $lifetime += $commission;
+
+        $created = $order->get_date_created();
+        if ( $created && $created->getTimestamp() >= $month_start ) {
+            $this_month += $commission;
+        }
+    }
+
+    /**
+     * Paid amount
+     * Read from payout history if available, else fallback to 0
+     */
+    $paid = (float) get_user_meta( $ambassador_id, 'champion_total_paid', true );
+
+    return [
+        'lifetime'   => round( $lifetime, 2 ),
+        'this_month' => round( $this_month, 2 ),
+        'paid'       => round( $paid, 2 ),
+    ];
+}
+
+
 function champion_get_customer_orders_stats( $ambassador_id ) {
     $ambassador_id = (int) $ambassador_id;
     if ( $ambassador_id <= 0 ) {
@@ -399,6 +462,9 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $commissions    = champion_get_ambassador_commissions($user_id, 20);
         $bonus_progress = champion_get_bonus_progress($user_id);
 
+        $commission_totals = champion_get_ambassador_commission_totals( $user_id );
+
+
         // Use computed bonus if meta is empty
         if ($total_bonus <= 0 && $bonus_progress['total_bonus_computed'] > 0) {
             $total_bonus = $bonus_progress['total_bonus_computed'];
@@ -588,6 +654,15 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         gap: 4px;
     }
 }
+
+
+.champion-summary-metrics{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
+  margin-bottom:24px;
+}
+
 </style>
 
 
@@ -1028,6 +1103,38 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             </p>
         <?php endif; ?>
     </div>
+
+
+
+
+    <div class="champion-metrics champion-summary-metrics">
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">Total Commission</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['lifetime'] ); ?>
+        </div>
+      </div>
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">This Month</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['this_month'] ); ?>
+        </div>
+      </div>
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">Paid Till Date</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['paid'] ); ?>
+        </div>
+      </div>
+
+    </div>
+
+
+
+
 </div>
 
 <script>
