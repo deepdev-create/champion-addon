@@ -65,6 +65,14 @@ class Champion_Helpers {
         $id = apply_filters('champion_get_affiliate_for_order', 0, $order);
         if ( intval($id) > 0 ) return intval($id);
 
+
+        // Coupon Affiliates PRO (wcusage) meta key
+        $wcusage_aff = (int) $order->get_meta('wcusage_affiliate_user', true);
+        if ( $wcusage_aff > 0 ) {
+            return $wcusage_aff;
+        }
+
+
         $opts = $this->get_opts();
         $keys = (array) $opts['affiliate_order_meta_keys'];
 

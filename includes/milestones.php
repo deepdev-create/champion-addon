@@ -110,7 +110,9 @@ class Champion_Milestones {
                 array( '%d', '%s' ),
                 array( '%d' )
             );
+
         } else {
+            
             $new_count = 1;
 
             $this->wpdb->insert(
