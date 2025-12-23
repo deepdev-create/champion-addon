@@ -331,6 +331,9 @@ class Champion_Dev_Test_Page {
             }
         }
 
+        delete_transient( 'champion_suppress_awards' );
+
+
         return array(
             'child_created'    => $children_created,
             'orders_created'   => $orders_created,

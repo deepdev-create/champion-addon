@@ -71,7 +71,16 @@ class Champion_Payouts {
         $opts = Champion_Helpers::instance()->get_opts();
         $min = floatval($opts['min_payout_amount']);
 
-        $rows = $wpdb->get_results( $wpdb->prepare("SELECT * FROM {$this->milestones_table} WHERE paid = 0 AND awarded_at <= %s", date('Y-m-d H:i:s', strtotime('today'))) );
+        $now  = current_time( 'mysql' );
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM {$this->milestones_table} WHERE paid = 0 AND awarded_at IS NOT NULL AND awarded_at <= %s",
+                $now
+            )
+        );
+
+        
+
         if ( empty($rows) ) return;
 
         foreach ( $rows as $r ) {
