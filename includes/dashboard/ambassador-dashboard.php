@@ -1043,6 +1043,31 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
     </div>
 
+    <div class="champion-metrics champion-summary-metrics">
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">Total Commission</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['lifetime'] ); ?>
+        </div>
+      </div>
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">This Month</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['this_month'] ); ?>
+        </div>
+      </div>
+
+      <div class="champion-metric">
+        <div class="champion-metric-label">Paid Till Date</div>
+        <div class="champion-metric-value">
+          <?php echo wc_price( $commission_totals['paid'] ); ?>
+        </div>
+      </div>
+
+    </div>
+
 
 
     <!-- Order history + commissions -->
@@ -1107,30 +1132,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
 
 
-    <div class="champion-metrics champion-summary-metrics">
-
-      <div class="champion-metric">
-        <div class="champion-metric-label">Total Commission</div>
-        <div class="champion-metric-value">
-          <?php echo wc_price( $commission_totals['lifetime'] ); ?>
-        </div>
-      </div>
-
-      <div class="champion-metric">
-        <div class="champion-metric-label">This Month</div>
-        <div class="champion-metric-value">
-          <?php echo wc_price( $commission_totals['this_month'] ); ?>
-        </div>
-      </div>
-
-      <div class="champion-metric">
-        <div class="champion-metric-label">Paid Till Date</div>
-        <div class="champion-metric-value">
-          <?php echo wc_price( $commission_totals['paid'] ); ?>
-        </div>
-      </div>
-
-    </div>
+    
 
 
 
