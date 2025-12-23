@@ -310,6 +310,12 @@ class Champion_Dev_Test_Page {
             $quantity = max( 1, (int) ceil( $min_amount / $price ) );
         }
 
+        // Dev test: suppress immediate award/payout while generating orders.
+        // Milestones will still be created, but do_action('champion_award_milestone', ...) will be skipped.
+        // This keeps payout controlled by "Force Trigger Monthly Payout".
+        set_transient( 'champion_suppress_awards', 1, 10 * MINUTE_IN_SECONDS );
+
+
         $children_created = 0;
         $orders_created   = 0;
 

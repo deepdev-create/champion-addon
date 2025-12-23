@@ -167,7 +167,17 @@ class Champion_Milestones {
                 'awarded_at' => current_time('mysql'),
                 'note' => 'auto-awarded 10x5'
             ) );
-            do_action('champion_award_milestone', $parent_id, $bonus, $block_index);
+
+            
+
+            // If dev test is generating orders, suppress immediate payout/award.
+            // Milestone rows remain unpaid; monthly payout/manual payout can handle later.
+            if ( get_transient( 'champion_suppress_awards' ) ) {
+                // No-op: do not award now.
+            } else {
+                do_action( 'champion_award_milestone', $parent_id, $bonus, $block_index );
+            }
+
         }
     }
 

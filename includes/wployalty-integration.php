@@ -37,14 +37,27 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
         private function award_points_via_wployalty_rest( $user_id, $amount ) {
 
             $user_id = (int) $user_id;
-            if ( $user_id <= 0 ) return false;
+            if ( $user_id <= 0 ) {
+                champion_addon_log( 'WPLoyalty award: invalid user_id', array( 'user_id' => $user_id ) );
+                return false;
+            }
 
             $user = get_user_by( 'id', $user_id );
-            if ( ! $user || empty( $user->user_email ) ) return false;
+            if ( ! $user || empty( $user->user_email ) ) {
+                champion_addon_log( 'WPLoyalty award: user not found or missing email', array( 'user_id' => $user_id ) );
+                return false;
+            }
 
             // WPLoyalty expects integer points
             $points = (int) round( (float) $amount );
-            if ( $points <= 0 ) return false;
+            if ( $points <= 0 ) {
+                champion_addon_log( 'WPLoyalty award: non-positive points computed', array(
+                    'user_id' => $user_id,
+                    'amount'  => $amount,
+                    'points'  => $points,
+                ) );
+                return false;
+            }
 
             // Cron runs without current user; REST permissions may require an admin.
             $old_user = get_current_user_id();
@@ -61,8 +74,46 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 wp_set_current_user( (int) $admins[0]->ID );
             }
 
+            $route = '/wc/v3/wployalty/customers/points/add';
+
+            // Verify REST route exists before calling (helps explain "2xx but nothing happened" / or missing route).
+            $route_exists = false;
+            if ( function_exists( 'rest_get_server' ) ) {
+                $server = rest_get_server();
+                if ( $server && method_exists( $server, 'get_routes' ) ) {
+                    $routes = $server->get_routes();
+                    if ( is_array( $routes ) && isset( $routes[ $route ] ) ) {
+                        $route_exists = true;
+                    }
+                }
+            }
+
+            champion_addon_log( 'WPLoyalty award: attempt', array(
+                'user_id'       => $user_id,
+                'user_email'    => $user->user_email,
+                'points'        => $points,
+                'route'         => $route,
+                'route_exists'  => $route_exists ? 1 : 0,
+                'acting_user'   => get_current_user_id(),
+            ) );
+
+            if ( ! $route_exists ) {
+                // Restore context before returning.
+                if ( $old_user ) {
+                    wp_set_current_user( (int) $old_user );
+                } else {
+                    wp_set_current_user( 0 );
+                }
+
+                champion_addon_log( 'WPLoyalty award: route missing; aborting to allow coupon fallback', array(
+                    'route' => $route,
+                ) );
+
+                return false;
+            }
+
             // Internal REST request to WPLoyalty
-            $request = new WP_REST_Request( 'POST', '/wc/v3/wployalty/customers/points/add' );
+            $request = new WP_REST_Request( 'POST', $route );
             $request->set_param( 'user_email', $user->user_email );
             $request->set_param( 'points', $points );
 
@@ -76,16 +127,51 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             }
 
             if ( is_wp_error( $response ) ) {
+                champion_addon_log( 'WPLoyalty award: WP_Error response', array(
+                    'user_id'  => $user_id,
+                    'error'    => $response->get_error_message(),
+                    'code'     => $response->get_error_code(),
+                    'data'     => $response->get_error_data(),
+                ) );
                 return false;
             }
 
             $status = (int) $response->get_status();
+            $data   = $response->get_data();
+
+            champion_addon_log( 'WPLoyalty award: REST response', array(
+                'user_id' => $user_id,
+                'status'  => $status,
+                'data'    => $data,
+            ) );
+
+            // Must be a 2xx response.
             if ( $status < 200 || $status >= 300 ) {
                 return false;
             }
 
+            /**
+             * Tighten "success":
+             * - Some endpoints can respond 2xx with an error payload.
+             * - We only treat it as success if payload is not empty AND does not clearly indicate an error.
+             */
+            if ( empty( $data ) ) {
+                return false;
+            }
+
+            if ( is_array( $data ) ) {
+                // Common patterns: { success: true }, { status: "success" }, { error: "..."} etc.
+                if ( isset( $data['error'] ) && ! empty( $data['error'] ) ) {
+                    return false;
+                }
+                if ( isset( $data['success'] ) && $data['success'] === false ) {
+                    return false;
+                }
+            }
+
             return true;
         }
+
 
 
 
@@ -200,6 +286,17 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
              */
             $awarded = $this->award_points_via_wployalty_rest( $parent_id, $amount_to_award );
 
+
+            champion_addon_log( 'WPLoyalty award: result (pre-filters)', array(
+                'parent_id'       => $parent_id,
+                'block_index'     => $block_index,
+                'amount'          => $amount,
+                'amount_to_award' => $amount_to_award,
+                'awarded'         => $awarded ? 1 : 0,
+                'milestone_id'    => $row ? (int) $row->id : 0,
+            ) );
+
+
             /**
              * 2) Allow store/dev override to confirm award happened
              * (e.g. if they use wallet credit instead of points)
@@ -230,18 +327,33 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
              */
             if ( $row ) {
                 if ( $awarded ) {
+
+                    champion_addon_log( 'WPLoyalty award: marking milestone paid', array(
+                        'milestone_id' => (int) $row->id,
+                        'parent_id'    => $parent_id,
+                        'block_index'  => $block_index,
+                    ) );
+
                     $wpdb->update(
                         $milestones_table,
                         array(
                             'paid' => 1,
-                            'note' => 'wployalty_points_added',
+                            'note' => 'wployalty_awarded_ok',
                         ),
                         array( 'id' => $row->id ),
                         array( '%d', '%s' ),
                         array( '%d' )
                     );
+
                 } else {
-                    // store note for debugging; do NOT mark paid
+
+                    champion_addon_log( 'WPLoyalty award: failed; leaving unpaid for coupon fallback', array(
+                        'milestone_id' => (int) $row->id,
+                        'parent_id'    => $parent_id,
+                        'block_index'  => $block_index,
+                    ) );
+
+                    // Do NOT mark paid. Default coupon handler (priority 30) will run and create coupon.
                     $wpdb->update(
                         $milestones_table,
                         array(
@@ -253,6 +365,10 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                     );
                 }
             }
+
+
+
+            
         }
 
     }

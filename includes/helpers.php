@@ -24,6 +24,43 @@ class Champion_Helpers {
         }
     }
 
+    /**
+     * Simple debug logger for Champion Addon.
+     *
+     * Logs only when WP_DEBUG is enabled OR CHAMPION_ADDON_DEBUG is defined true.
+     * Never throws; safe to call in cron/admin/ajax.
+     *
+     * @param string $message
+     * @param array  $context
+     * @return void
+     */
+    function champion_addon_log( $message, $context = array() ) {
+        $enabled = false;
+
+        if ( defined( 'CHAMPION_ADDON_DEBUG' ) && CHAMPION_ADDON_DEBUG ) {
+            $enabled = true;
+        } elseif ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            $enabled = true;
+        }
+
+        if ( ! $enabled ) {
+            return;
+        }
+
+        $line = '[Champion Addon] ' . (string) $message;
+
+        if ( ! empty( $context ) && is_array( $context ) ) {
+            // Avoid fatals on bad utf8 / recursion; keep logs compact.
+            $json = wp_json_encode( $context );
+            if ( $json ) {
+                $line .= ' | ' . $json;
+            }
+        }
+
+        error_log( $line );
+    }
+
+
     public function defaults() {
         return array(
             'bonus_amount' => 500.00,
