@@ -38,20 +38,20 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
             $user_id = (int) $user_id;
             if ( $user_id <= 0 ) {
-                champion_addon_log( 'WPLoyalty award: invalid user_id', array( 'user_id' => $user_id ) );
+                Champion_Helpers::log( 'WPLoyalty award: invalid user_id', array( 'user_id' => $user_id ) );
                 return false;
             }
 
             $user = get_user_by( 'id', $user_id );
             if ( ! $user || empty( $user->user_email ) ) {
-                champion_addon_log( 'WPLoyalty award: user not found or missing email', array( 'user_id' => $user_id ) );
+                Champion_Helpers::log( 'WPLoyalty award: user not found or missing email', array( 'user_id' => $user_id ) );
                 return false;
             }
 
             // WPLoyalty expects integer points
             $points = (int) round( (float) $amount );
             if ( $points <= 0 ) {
-                champion_addon_log( 'WPLoyalty award: non-positive points computed', array(
+                Champion_Helpers::log( 'WPLoyalty award: non-positive points computed', array(
                     'user_id' => $user_id,
                     'amount'  => $amount,
                     'points'  => $points,
@@ -88,7 +88,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 }
             }
 
-            champion_addon_log( 'WPLoyalty award: attempt', array(
+            Champion_Helpers::log( 'WPLoyalty award: attempt', array(
                 'user_id'       => $user_id,
                 'user_email'    => $user->user_email,
                 'points'        => $points,
@@ -105,7 +105,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                     wp_set_current_user( 0 );
                 }
 
-                champion_addon_log( 'WPLoyalty award: route missing; aborting to allow coupon fallback', array(
+                Champion_Helpers::log( 'WPLoyalty award: route missing; aborting to allow coupon fallback', array(
                     'route' => $route,
                 ) );
 
@@ -127,7 +127,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             }
 
             if ( is_wp_error( $response ) ) {
-                champion_addon_log( 'WPLoyalty award: WP_Error response', array(
+                Champion_Helpers::log( 'WPLoyalty award: WP_Error response', array(
                     'user_id'  => $user_id,
                     'error'    => $response->get_error_message(),
                     'code'     => $response->get_error_code(),
@@ -139,7 +139,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             $status = (int) $response->get_status();
             $data   = $response->get_data();
 
-            champion_addon_log( 'WPLoyalty award: REST response', array(
+            Champion_Helpers::log( 'WPLoyalty award: REST response', array(
                 'user_id' => $user_id,
                 'status'  => $status,
                 'data'    => $data,
@@ -286,7 +286,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             $awarded = $this->award_points_via_wployalty_rest( $parent_id, $amount_to_award );
 
 
-            champion_addon_log( 'WPLoyalty award: result (pre-filters)', array(
+            Champion_Helpers::log( 'WPLoyalty award: result (pre-filters)', array(
                 'parent_id'       => $parent_id,
                 'block_index'     => $block_index,
                 'amount'          => $amount,
@@ -327,7 +327,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
             if ( $row ) {
                 if ( $awarded ) {
 
-                    champion_addon_log( 'WPLoyalty award: marking milestone paid', array(
+                    Champion_Helpers::log( 'WPLoyalty award: marking milestone paid', array(
                         'milestone_id' => (int) $row->id,
                         'parent_id'    => $parent_id,
                         'block_index'  => $block_index,
@@ -346,7 +346,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
                 } else {
 
-                    champion_addon_log( 'WPLoyalty award: failed; leaving unpaid for coupon fallback', array(
+                    Champion_Helpers::log( 'WPLoyalty award: failed; leaving unpaid for coupon fallback', array(
                         'milestone_id' => (int) $row->id,
                         'parent_id'    => $parent_id,
                         'block_index'  => $block_index,

@@ -35,40 +35,22 @@ class Champion_Helpers {
      * @return void
      */
     function champion_addon_log( $message, $context = array() ) {
-       
-        $enabled = false;
-
-        if ( defined( 'CHAMPION_ADDON_DEBUG' ) && CHAMPION_ADDON_DEBUG ) {
-            $enabled = true;
-        } elseif ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            $enabled = true;
-        } else {
-            // If WPLoyalty payout is enabled in plugin settings, enable logging for payout diagnostics.
-            if ( class_exists( 'Champion_Helpers' ) ) {
-                $opts = Champion_Helpers::instance()->get_opts();
-                if ( ! empty( $opts['award_via_wployalty'] ) ) {
-                    $enabled = true;
-                }
-            }
-        }
-
-        if ( ! $enabled ) {
+        if ( class_exists( 'Champion_Helpers' ) && method_exists( 'Champion_Helpers', 'log' ) ) {
+            Champion_Helpers::log( $message, $context );
             return;
         }
 
-
+        // Absolute fallback (should rarely happen).
         $line = '[Champion Addon] ' . (string) $message;
-
         if ( ! empty( $context ) && is_array( $context ) ) {
-            // Avoid fatals on bad utf8 / recursion; keep logs compact.
             $json = wp_json_encode( $context );
             if ( $json ) {
                 $line .= ' | ' . $json;
             }
         }
-
         error_log( $line );
     }
+
 
 
     public function defaults() {
@@ -102,6 +84,52 @@ class Champion_Helpers {
         $o = get_option(self::OPT_KEY, $this->defaults());
         return array_merge($this->defaults(), (array)$o);
     }
+
+    /**
+     * Debug logger (static).
+     *
+     * Enabled when:
+     * - CHAMPION_ADDON_DEBUG is true, OR
+     * - WP_DEBUG is true, OR
+     * - award_via_wployalty setting is enabled (for payout diagnostics)
+     *
+     * @param string $message
+     * @param array  $context
+     * @return void
+     */
+    public static function log( $message, $context = array() ) {
+
+        $enabled = false;
+
+        if ( defined( 'CHAMPION_ADDON_DEBUG' ) && CHAMPION_ADDON_DEBUG ) {
+            $enabled = true;
+        } elseif ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            $enabled = true;
+        } else {
+            // If WPLoyalty payout is enabled in plugin settings, enable logs for diagnostics.
+            $defaults = ( method_exists( __CLASS__, 'defaults' ) ) ? ( new self() )->defaults() : array();
+            $opts     = get_option( self::OPT_KEY, $defaults );
+            if ( is_array( $opts ) && ! empty( $opts['award_via_wployalty'] ) ) {
+                $enabled = true;
+            }
+        }
+
+        if ( ! $enabled ) {
+            return;
+        }
+
+        $line = '[Champion Addon] ' . (string) $message;
+
+        if ( ! empty( $context ) && is_array( $context ) ) {
+            $json = wp_json_encode( $context );
+            if ( $json ) {
+                $line .= ' | ' . $json;
+            }
+        }
+
+        error_log( $line );
+    }
+
 
     /**
      * Robust detection of affiliate id for an order.
