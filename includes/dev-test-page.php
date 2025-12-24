@@ -345,8 +345,10 @@ class Champion_Dev_Test_Page {
         $parent_id = intval( $parent_id );
         $index     = intval( $index );
 
-        $username = sprintf( 'champ_child_%d_%d', time(), $index );
-        $email    = sprintf( 'champ_child_%d_%d@example.com', $parent_id, $index );
+        $run_id   = time(); // unique per run
+        $username = sprintf( 'champ_child_%d_%d', $run_id, $index );
+        $email    = sprintf( 'champ_child_%d_%d_%d@example.com', $parent_id, $run_id, $index );
+        
         $password = wp_generate_password( 12, true );
 
         $user_id = wp_insert_user( array(
