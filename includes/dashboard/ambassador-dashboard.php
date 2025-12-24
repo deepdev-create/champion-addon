@@ -53,11 +53,13 @@ function champion_get_ambassador_commission_totals( $ambassador_id ) {
         }
     }
 
+
     /**
-     * Paid amount
-     * Read from payout history if available, else fallback to 0
+     * Paid amount (bonus payouts)
+     * Use milestone payout history (paid=1) instead of a user meta that is not maintained reliably.
      */
-    $paid = (float) get_user_meta( $ambassador_id, 'champion_total_paid', true );
+    $paid = (float) champion_get_ambassador_paid_total_from_milestones( $ambassador_id );
+
 
     return [
         'lifetime'   => round( $lifetime, 2 ),
@@ -104,6 +106,27 @@ function champion_get_customer_orders_stats( $ambassador_id ) {
         'orders'  => $order_count,
         'revenue' => $revenue,
     ];
+}
+
+
+function champion_get_ambassador_paid_total_from_milestones( $parent_id ) {
+    global $wpdb;
+
+    $parent_id = (int) $parent_id;
+    if ( $parent_id <= 0 ) {
+        return 0.0;
+    }
+
+    $table = $wpdb->prefix . 'champion_milestones';
+
+    $sum = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT SUM(amount) FROM {$table} WHERE parent_affiliate_id = %d AND paid = 1",
+            $parent_id
+        )
+    );
+
+    return $sum ? (float) $sum : 0.0;
 }
 
 
@@ -856,11 +879,13 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
                 echo '<table class="widefat striped" style="max-width: 1000px;">';
                 echo '<thead><tr>
-                        <th style="width: 25%;">Milestone</th>
-                        <th style="width: 25%;">Amount</th>
-                        <th style="width: 20%;">Status</th>
-                        <th style="width: 30%;">Awarded</th>
+                        <th style="width: 20%;">Milestone</th>
+                        <th style="width: 20%;">Amount</th>
+                        <th style="width: 15%;">Status</th>
+                        <th style="width: 25%;">Details</th>
+                        <th style="width: 20%;">Awarded</th>
                       </tr></thead><tbody>';
+
 
                 foreach ( $payouts as $row ) {
 
@@ -888,10 +913,43 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                     $awarded = ! empty( $row->awarded_at ) ? $row->awarded_at : '-';
 
                     echo '<tr>';
+
                     echo '<td>' . esc_html( $milestone_label ) . '</td>';
                     echo '<td>' . $amount_html . '</td>';
                     echo '<td>' . esc_html( $status ) . '</td>';
+
+                    // Details column
+                    $details_html = '-';
+
+                    if ( intval( $row->paid ) === 1 ) {
+
+                        // Paid via coupon: show coupon code (ambassador needs the code)
+                        if ( intval( $row->coupon_id ) > 0 ) {
+                            $coupon_code = get_the_title( intval( $row->coupon_id ) );
+                            if ( ! empty( $coupon_code ) ) {
+                                $details_html = '<code>' . esc_html( $coupon_code ) . '</code>';
+                            } else {
+                                $details_html = esc_html__( 'Coupon generated', 'champion-addon' );
+                            }
+                        } else {
+                            // Paid via WPLoyalty: show points + link to loyalty page
+                            $points = (int) round( (float) $row->amount );
+                            $url    = site_url( '/my-account/loyalty_reward/' );
+
+                            $details_html = sprintf(
+                                '%1$s ' . esc_html__( 'points', 'champion-addon' ) . ' — <a href="%2$s" target="_blank" rel="noopener">%3$s</a>',
+                                esc_html( $points ),
+                                esc_url( $url ),
+                                esc_html__( 'View / Redeem', 'champion-addon' )
+                            );
+                        }
+                    }
+
+                    echo '<td>' . wp_kses_post( $details_html ) . '</td>';
                     echo '<td>' . esc_html( $awarded ) . '</td>';
+
+
+                    
                     echo '</tr>';
                 }
 
