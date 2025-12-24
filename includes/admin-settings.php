@@ -46,10 +46,10 @@ class Champion_Admin {
                     <tr><th>Attachment window days</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[attachment_window_days]" value="<?php echo esc_attr($options['attachment_window_days']); ?>" /></td></tr>
                     <tr><th>Award via WPLoyalty (direct credit)</th><td><input type="checkbox" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[award_via_wployalty]" value="1" <?php checked( ! empty($options['award_via_wployalty']) ); ?> /></td></tr>
                     <tr><th>Min payout amount</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[min_payout_amount]" value="<?php echo esc_attr($options['min_payout_amount']); ?>" /></td></tr>
+
+                    <!-- Customer Commission Settings (New Fields) -->
                     <tr>
-                        <th>
-                            Customer order commission type
-                        </th>
+                        <th>Customer order commission type</th>
                         <td>
                             <select name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_type]">
                               <option value="percent" <?php selected($opts['customer_order_commission_type'] ?? 'percent', 'percent'); ?>>Percent</option>
@@ -58,14 +58,27 @@ class Champion_Admin {
                         </td>
                     </tr>
 
-                     <tr>
-                        <th>
-                            Customer order commission value
-
-                        </th>
+                    <tr>
+                        <th>Customer order commission value</th>
                         <td>
                            <input type="number" step="0.01" name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_value]" value="<?php echo esc_attr($opts['customer_order_commission_value'] ?? 0); ?>" />                        
                        </td>
+                    </tr>
+
+                    <!-- New fields for Customer Commission Payout -->
+                    <tr>
+                        <th>Customer commission minimum payout</th>
+                        <td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_minimum_payout]" value="<?php echo esc_attr($opts['customer_commission_minimum_payout'] ?? 100); ?>" /></td>
+                    </tr>
+
+                    <tr>
+                        <th>Customer commission payout method</th>
+                        <td>
+                            <select name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_payout_method]">
+                                <option value="coupon" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'coupon'); ?>>Coupon</option>
+                                <option value="wployalty" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'wployalty'); ?>>WPLoyalty Points</option>
+                            </select>
+                        </td>
                     </tr>
 
                 </table>
@@ -117,3 +130,6 @@ class Champion_Admin {
         <?php
     }
 }
+
+// Instantiate the class
+Champion_Admin::instance();
