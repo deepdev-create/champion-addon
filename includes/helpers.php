@@ -35,17 +35,27 @@ class Champion_Helpers {
      * @return void
      */
     function champion_addon_log( $message, $context = array() ) {
+       
         $enabled = false;
 
         if ( defined( 'CHAMPION_ADDON_DEBUG' ) && CHAMPION_ADDON_DEBUG ) {
             $enabled = true;
         } elseif ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             $enabled = true;
+        } else {
+            // If WPLoyalty payout is enabled in plugin settings, enable logging for payout diagnostics.
+            if ( class_exists( 'Champion_Helpers' ) ) {
+                $opts = Champion_Helpers::instance()->get_opts();
+                if ( ! empty( $opts['award_via_wployalty'] ) ) {
+                    $enabled = true;
+                }
+            }
         }
 
         if ( ! $enabled ) {
             return;
         }
+
 
         $line = '[Champion Addon] ' . (string) $message;
 

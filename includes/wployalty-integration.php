@@ -240,10 +240,9 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
                 return;
             }
 
-            // If WPLoyalty is not active, exit.
-            if ( ! $this->is_wployalty_active() ) {
-                return;
-            }
+            // Do NOT hard-exit based on plugin detection.
+            // We will attempt award via REST route; if route is missing or award fails, coupon handler will take over.
+
 
             global $wpdb;
 
@@ -368,7 +367,7 @@ if ( ! class_exists( 'Champion_WPLoyalty' ) ) {
 
 
 
-            
+
         }
 
     }
