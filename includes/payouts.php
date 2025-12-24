@@ -132,4 +132,6 @@ class Champion_Payouts {
         global $wpdb;
         return $wpdb->get_results( $wpdb->prepare("SELECT * FROM {$this->milestones_table} ORDER BY awarded_at DESC LIMIT %d", intval($limit)) );
     }
+
+    
 }

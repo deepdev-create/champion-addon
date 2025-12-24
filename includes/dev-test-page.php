@@ -246,8 +246,18 @@ class Champion_Dev_Test_Page {
                 </ol>
 
             </form>
+
+            <form method="post">
+                <input type="submit" name="trigger_customer_payout" value="Trigger Customer Payouts" class="button button-primary">
+            </form>
         </div>
         <?php
+
+        if (isset($_POST['trigger_customer_payout'])) {
+            Champion_Payouts::instance()->process_customer_commission_payouts(); // Trigger the function for payouts
+            echo '<div class="updated"><p>Customer payouts triggered successfully!</p></div>';
+        }
+        
     }
 
     protected static function create_test_data( $parent_id, $child_count, $product_id, $orders_per_child_in, $total_override_in, $mark_parent_amb ) {
