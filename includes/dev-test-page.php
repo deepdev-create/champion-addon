@@ -121,6 +121,18 @@ class Champion_Dev_Test_Page {
             }
         }
 
+
+        if (
+            isset( $_POST['champion_force_customer_commission_payout'] ) &&
+            check_admin_referer( 'champion_force_customer_commission_payout' )
+        ) {
+            if ( class_exists( 'Champion_Payouts' ) ) {
+                Champion_Payouts::instance()->process_monthly_customer_commission_payouts();
+                echo '<div class="updated"><p>Customer commission payout executed.</p></div>';
+            }
+        }
+
+
         ?>
         <div class="wrap">
             <h1>Champion Dev Test Tools</h1>
@@ -247,17 +259,16 @@ class Champion_Dev_Test_Page {
 
             </form>
 
-            <form method="post">
-                <input type="submit" name="trigger_customer_payout" value="Trigger Customer Payouts" class="button button-primary">
-            </form>
+            <form method="post" style="margin-top:20px;">
+    <?php wp_nonce_field( 'champion_force_customer_commission_payout' ); ?>
+    <input type="hidden" name="champion_force_customer_commission_payout" value="1" />
+    <button class="button button-secondary">
+        Force Trigger Customer Commission Payout
+    </button>
+</form>
+
         </div>
         <?php
-
-        if (isset($_POST['trigger_customer_payout'])) {
-            Champion_Payouts::instance()->process_customer_commission_payouts(); // Trigger the function for payouts
-            echo '<div class="updated"><p>Customer payouts triggered successfully!</p></div>';
-        }
-        
     }
 
     protected static function create_test_data( $parent_id, $child_count, $product_id, $orders_per_child_in, $total_override_in, $mark_parent_amb ) {

@@ -567,6 +567,27 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         // QR code (simple external generator)
         $qr_code_src  = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' . $share_url;
 
+
+
+        $customer_commission_orders = wc_get_orders( array(
+            'limit'      => -1,
+            'status'     => array( 'completed' ),
+            'meta_query' => array(
+                array(
+                    'key'   => 'champion_ambassador_id',
+                    'value' => get_current_user_id(),
+                ),array(
+                    'key'   => 'champion_customer_ref_ambassador_id',
+                    'value' => get_current_user_id(),
+                ),
+                array(
+                    'key'     => 'champion_commission_paid',
+                    'compare' => 'EXISTS',
+                ),
+            ),
+        ) );
+
+
         ob_start();
         ?>
 
@@ -1133,6 +1154,69 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             </p>
         <?php endif; ?>
     </div>
+
+    
+    <h3 style="margin-top:40px;">Customer Commission Payout History</h3>
+
+        <table class="widefat striped">
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>Amount</th>
+                    <th>Payout Method</th>
+                    <th>Reference</th>
+                    <th>Paid On</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ( empty( $customer_commission_orders ) ) : ?>
+                    <tr>
+                        <td colspan="5">No customer commission payouts yet.</td>
+                    </tr>
+                <?php else : ?>
+                    <?php foreach ( $customer_commission_orders as $order ) : ?>
+
+                        <?php
+                        $amount     = $order->get_meta( 'champion_commission_amount' );
+                        $paid_on    = $order->get_meta( 'champion_commission_paid_on' );
+                        $ref        = $order->get_meta( 'champion_commission_payout_ref' );
+                        ?>
+
+                        <tr>
+                            <td>
+                                <a href="<?php echo esc_url( get_edit_post_link( $order->get_id() ) ); ?>">
+                                    #<?php echo esc_html( $order->get_id() ); ?>
+                                </a>
+                            </td>
+
+                            <td>
+                                <?php echo wc_price( $amount ); ?>
+                            </td>
+
+                            <td>
+                                <?php echo ( $ref === 'wployalty' ) ? 'Points' : 'Coupon'; ?>
+                            </td>
+
+                            <td>
+                                <?php
+                                if ( is_numeric( $ref ) ) {
+                                    echo 'Coupon #' . intval( $ref );
+                                } else {
+                                    echo esc_html( ucfirst( $ref ) );
+                                }
+                                ?>
+                            </td>
+
+                            <td>
+                                <?php echo esc_html( $paid_on ); ?>
+                            </td>
+                        </tr>
+
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+
 
     <div class="champion-card champion-customer-orders-card">
       <div class="champion-card-head">
