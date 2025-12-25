@@ -37,25 +37,24 @@ class Champion_Payouts {
 
         // Get completed orders with unpaid customer commission
         $orders = wc_get_orders( array(
-            'limit'      => -1,
-            'status'     => array( 'completed' ),
-            'meta_query' => array(
-                array(
-                    'key'     => 'champion_commission_amount',
-                    'compare' => 'EXISTS',
-                ),
-                array(
-                    'key'     => 'champion_commission_paid',
-                    'compare' => 'NOT EXISTS',
-                ),
-            ),
+            'limit'   => -1,
+            'status'  => array( 'completed' ),
+            'meta_key'     => 'champion_commission_amount',
+            'meta_compare' => '>',
+            'meta_value'   => '0',
         ) );
+
 
         if ( empty( $orders ) ) {
             return;
         }
 
         foreach ( $orders as $order ) {
+
+            $paid = $order->get_meta( 'champion_commission_paid' );
+            if ( ! empty( $paid ) ) {
+                continue;
+            }
 
             $amount        = (float) $order->get_meta( 'champion_commission_amount' );
             $ambassador_id = (int) $order->get_meta( 'champion_ambassador_id' );
@@ -71,7 +70,7 @@ class Champion_Payouts {
              */
             if ( $method === 'wployalty' ) {
 
-                do_action(
+               /* do_action(
                     'champion_wployalty_award_credit',
                     $ambassador_id,
                     $amount,
@@ -80,7 +79,27 @@ class Champion_Payouts {
                         'order_id' => $order->get_id(),
                         'amount'   => $amount,
                     )
-                );
+                );*/
+/*
+                do_action(
+                    'champion_wployalty_award_credit',
+                    $ambassador_id,
+                    $amount,
+                    0, // block_index equivalent for customer commission
+                    (object) array(
+                        'source'   => 'customer_commission',
+                        'order_id' => $order->get_id(),
+                        'amount'   => $amount,
+                    )
+                );*/
+
+
+                $awarded = $this->award_points_via_wployalty_rest( $ambassador_id, $amount );
+
+
+               
+
+
 
                 $payout_ref = 'wployalty';
 
@@ -127,6 +146,145 @@ class Champion_Payouts {
             $order->save();
         }
     }
+
+
+    private function award_points_via_wployalty_rest( $user_id, $amount ) {
+
+            $user_id = (int) $user_id;
+            if ( $user_id <= 0 ) {
+                Champion_Helpers::log( 'WPLoyalty award: invalid user_id', array( 'user_id' => $user_id ) );
+                return false;
+            }
+
+            $user = get_user_by( 'id', $user_id );
+            if ( ! $user || empty( $user->user_email ) ) {
+                Champion_Helpers::log( 'WPLoyalty award: user not found or missing email', array( 'user_id' => $user_id ) );
+                return false;
+            }
+
+            // WPLoyalty expects integer points
+            $points = (int) round( (float) $amount );
+            if ( $points <= 0 ) {
+                Champion_Helpers::log( 'WPLoyalty award: non-positive points computed', array(
+                    'user_id' => $user_id,
+                    'amount'  => $amount,
+                    'points'  => $points,
+                ) );
+                return false;
+            }
+
+            // Cron runs without current user; REST permissions may require an admin.
+            $old_user = get_current_user_id();
+
+            $admins = get_users( array(
+                'role'    => 'administrator',
+                'orderby' => 'ID',
+                'order'   => 'ASC',
+                'number'  => 1,
+                'fields'  => array( 'ID' ),
+            ) );
+
+            if ( ! empty( $admins[0]->ID ) ) {
+                wp_set_current_user( (int) $admins[0]->ID );
+            }
+
+            $route = '/wc/v3/wployalty/customers/points/add';
+
+            // Verify REST route exists before calling (helps explain "2xx but nothing happened" / or missing route).
+            $route_exists = false;
+            if ( function_exists( 'rest_get_server' ) ) {
+                $server = rest_get_server();
+                if ( $server && method_exists( $server, 'get_routes' ) ) {
+                    $routes = $server->get_routes();
+                    if ( is_array( $routes ) && isset( $routes[ $route ] ) ) {
+                        $route_exists = true;
+                    }
+                }
+            }
+
+            Champion_Helpers::log( 'WPLoyalty award: attempt', array(
+                'user_id'       => $user_id,
+                'user_email'    => $user->user_email,
+                'points'        => $points,
+                'route'         => $route,
+                'route_exists'  => $route_exists ? 1 : 0,
+                'acting_user'   => get_current_user_id(),
+            ) );
+
+            if ( ! $route_exists ) {
+                // Restore context before returning.
+                if ( $old_user ) {
+                    wp_set_current_user( (int) $old_user );
+                } else {
+                    wp_set_current_user( 0 );
+                }
+
+                Champion_Helpers::log( 'WPLoyalty award: route missing; aborting to allow coupon fallback', array(
+                    'route' => $route,
+                ) );
+
+                return false;
+            }
+
+            // Internal REST request to WPLoyalty
+            $request = new WP_REST_Request( 'POST', $route );
+            $request->set_param( 'user_email', $user->user_email );
+            $request->set_param( 'points', $points );
+
+            $response = rest_do_request( $request );
+
+            // Restore context
+            if ( $old_user ) {
+                wp_set_current_user( (int) $old_user );
+            } else {
+                wp_set_current_user( 0 );
+            }
+
+            if ( is_wp_error( $response ) ) {
+                Champion_Helpers::log( 'WPLoyalty award: WP_Error response', array(
+                    'user_id'  => $user_id,
+                    'error'    => $response->get_error_message(),
+                    'code'     => $response->get_error_code(),
+                    'data'     => $response->get_error_data(),
+                ) );
+                return false;
+            }
+
+            $status = (int) $response->get_status();
+            $data   = $response->get_data();
+
+            Champion_Helpers::log( 'WPLoyalty award: REST response', array(
+                'user_id' => $user_id,
+                'status'  => $status,
+                'data'    => $data,
+            ) );
+
+            // Must be a 2xx response.
+            if ( $status < 200 || $status >= 300 ) {
+                return false;
+            }
+
+            /**
+             * Tighten "success":
+             * - Some endpoints can respond 2xx with an error payload.
+             * - We only treat it as success if payload is not empty AND does not clearly indicate an error.
+             */
+            if ( empty( $data ) ) {
+                return false;
+            }
+
+            if ( is_array( $data ) ) {
+                // Common patterns: { success: true }, { status: "success" }, { error: "..."} etc.
+                if ( isset( $data['error'] ) && ! empty( $data['error'] ) ) {
+                    return false;
+                }
+                if ( isset( $data['success'] ) && $data['success'] === false ) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
 
     /**

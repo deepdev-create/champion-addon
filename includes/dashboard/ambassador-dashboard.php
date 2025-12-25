@@ -576,7 +576,9 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 array(
                     'key'   => 'champion_ambassador_id',
                     'value' => get_current_user_id(),
-                ),array(
+                ),
+
+                array(
                     'key'   => 'champion_customer_ref_ambassador_id',
                     'value' => get_current_user_id(),
                 ),
