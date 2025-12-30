@@ -229,7 +229,7 @@ if (!function_exists('champion_get_ambassador_referral_links')) {
         }
 
         // Customer referral link – you can change base URL if your logic is different
-        $customer_ref_link = add_query_arg('ref', $ref_code, site_url('/'));
+        $customer_ref_link = add_query_arg('ref', $ref_code, site_url('sign-in/'));
 
         // Ambassador invite link – matches your doc: /ambassador-register/?invite=CODE
         $ambassador_invite_link = add_query_arg('invite', $ref_code, site_url('/ambassador-register/'));
