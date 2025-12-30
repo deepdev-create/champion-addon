@@ -4,6 +4,8 @@ if (!defined('ABSPATH')) {
 }
 
 
+
+
 function champion_get_ambassador_commission_totals( $ambassador_id ) {
 
     $ambassador_id = (int) $ambassador_id;
@@ -401,7 +403,7 @@ if (!function_exists('champion_get_referred_customers')) {
  * Filter: `champion_ambassador_commission_orders`
  */
 if (!function_exists('champion_get_ambassador_commissions')) {
-    function champion_get_ambassador_commissions($user_id, $limit = 20)
+    function champion_get_ambassador_commissions($user_id, $limit = 200)
     {
         if (!class_exists('WC_Order')) {
             return [];
@@ -419,10 +421,17 @@ if (!function_exists('champion_get_ambassador_commissions')) {
             ],
         ]);
 
+        $uid = get_current_user_id();
+
+         $orders = array_filter($orders, function($order) use ($uid){
+            if ( ! $order instanceof WC_Order ) return false;
+
+            $amb1 = (int) $order->get_meta('champion_ambassador_id', true);
+            
+            return ( ($amb1 === $uid) );
+        });
+
         $data = [];
-
-
-
 
         foreach ($orders as $order) {
             /** @var WC_Order $order */
@@ -540,7 +549,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $ambassadors    = champion_get_referred_ambassadors($user_id);
         $customers      = champion_get_referred_customers($user_id);
         $customer_stats = champion_get_customer_orders_stats($user_id);
-        $commissions    = champion_get_ambassador_commissions($user_id, 20);
+        $commissions    = champion_get_ambassador_commissions($user_id, 200);
         $bonus_progress = champion_get_bonus_progress($user_id);
 
         $commission_totals = champion_get_ambassador_commission_totals( $user_id );
@@ -568,7 +577,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $qr_code_src  = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' . $share_url;
 
 
-
+        /*
         $customer_commission_orders = wc_get_orders( array(
             'limit'      => -1,
             'status'     => array( 'completed' ),
@@ -576,9 +585,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 array(
                     'key'   => 'champion_ambassador_id',
                     'value' => get_current_user_id(),
-                ),
-
-                array(
+                ),array(
                     'key'   => 'champion_customer_ref_ambassador_id',
                     'value' => get_current_user_id(),
                 ),
@@ -587,257 +594,31 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                     'compare' => 'EXISTS',
                 ),
             ),
+        ) );*/
+
+        $orders = wc_get_orders( array(
+            'limit'  => 300, // keep reasonable; increase if needed
+            'status' => array('completed','wc-processing'),
+            'orderby'=> 'date',
+            'order'  => 'DESC',
+            'return' => 'objects',
         ) );
 
+        $uid = get_current_user_id();
+        $customer_commission_orders = array_filter($orders, function($order) use ($uid){
+            if ( ! $order instanceof WC_Order ) return false;
+
+            $amb1 = (int) $order->get_meta('champion_ambassador_id', true);
+            $amb2 = (int) $order->get_meta('champion_customer_ref_ambassador_id', true);
+            $paid_exists = $order->get_meta('champion_commission_paid', true);
+            // (ambassador match) AND paid meta exists
+            return ( ($amb1 === $uid) || ($amb2 === $uid) ) && ($paid_exists !== '' && $paid_exists !== null);
+        });
 
         ob_start();
         ?>
 
-<style>
-.champion-dashboard-wrapper {
-    max-width: 1100px;
-    margin: 0 auto 40px;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-.champion-card {
-    background: #ffffff;
-    padding: 20px;
-    border-radius: 14px;
-    margin-bottom: 25px;
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-}
-.champion-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
-.champion-card-title {
-    font-size: 20px;
-    font-weight: 700;
-}
-.champion-card-subtitle {
-    font-size: 13px;
-    color: #6b7280;
-}
-.champion-flex {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-}
-.champion-col {
-    flex: 1 1 250px;
-}
-.champion-copy-wrap {
-    margin-bottom: 12px;
-}
-.champion-copy-label {
-    font-size: 13px;
-    color: #6b7280;
-    margin-bottom: 4px;
-}
-.champion-copy-box {
-    display: flex;
-    align-items: center;
-    background: #f3f4f6;
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 13px;
-}
-.champion-copy-text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.champion-copy-btn {
-    margin-left: auto;
-    border: none;
-    background: #111827;
-    color: #ffffff;
-    font-size: 11px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    cursor: pointer;
-}
-.champion-copy-btn:active {
-    transform: scale(0.98);
-}
-.champion-stats-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-}
-.champion-stat-box {
-    flex: 1 1 160px;
-    background: #f9fafb;
-    border-radius: 12px;
-    padding: 14px;
-    text-align: center;
-}
-.champion-stat-label {
-    font-size: 12px;
-    color: #6b7280;
-}
-.champion-stat-value {
-    font-size: 26px;
-    font-weight: 700;
-    margin-top: 4px;
-}
-.champion-stat-sub {
-    font-size: 11px;
-    color: #9ca3af;
-    margin-top: 2px;
-}
-.champion-progress-bar-outer {
-    width: 100%;
-    background: #e5e7eb;
-    border-radius: 999px;
-    height: 12px;
-    overflow: hidden;
-}
-.champion-progress-bar-inner {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #22c55e, #16a34a);
-    width: 0%;
-}
-.champion-progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    margin-top: 6px;
-    color: #4b5563;
-}
-.champion-share-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-}
-.champion-share-list a {
-    font-size: 12px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    border: 1px solid #e5e7eb;
-    text-decoration: none;
-}
-.champion-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-}
-.champion-table th,
-.champion-table td {
-    padding: 8px 8px;
-    border-bottom: 1px solid #e5e7eb;
-    text-align: left;
-}
-.champion-table th {
-    font-weight: 600;
-    background: #f9fafb;
-}
-.champion-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    font-size: 11px;
-    border-radius: 999px;
-}
-.champion-badge-success {
-    background: #dcfce7;
-    color: #166534;
-}
-.champion-badge-muted {
-    background: #f3f4f6;
-    color: #4b5563;
-}
-.champion-tag-muted {
-    font-size: 11px;
-    color: #9ca3af;
-}
-@media (max-width: 768px) {
-    .champion-card-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-    }
-}
-
-
-.champion-summary-metrics{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-  gap:16px;
-  margin-bottom:24px;
-}
-
-</style>
-
-
-<style>
-  .champion-card{
-    background:#fff;
-    border:1px solid rgba(0,0,0,.08);
-    border-radius:14px;
-    padding:18px 18px;
-    box-shadow:0 6px 18px rgba(0,0,0,.04);
-    margin-top:18px;
-  }
-  .champion-card-head{
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    gap:16px;
-    margin-bottom:14px;
-  }
-  .champion-card-head h3{
-    margin:0;
-    font-size:22px;
-    line-height:1.2;
-  }
-  .champion-card-subtitle{
-    font-size:13px;
-    opacity:.7;
-    text-align:right;
-  }
-  .champion-metrics{
-    display:grid;
-    grid-template-columns:repeat(2, minmax(0, 1fr));
-    gap:14px;
-  }
-  .champion-metric{
-    background:rgba(0,0,0,.03);
-    border-radius:12px;
-    padding:14px 14px;
-  }
-  .champion-metric-label{
-    font-size:12px;
-    opacity:.7;
-    margin-bottom:6px;
-  }
-  .champion-metric-value{
-    font-size:26px;
-    font-weight:700;
-    letter-spacing:-0.3px;
-  }
-
-  /* Mobile */
-  @media (max-width: 768px){
-    .champion-card-head{
-      flex-direction:column;
-      align-items:flex-start;
-    }
-    .champion-card-subtitle{
-      text-align:left;
-    }
-    .champion-metrics{
-      grid-template-columns:1fr;
-    }
-  }
-</style>
-
-
 <div class="champion-dashboard-wrapper">
-
     <!-- Referral Links + QR + Share -->
     <div class="champion-card">
         <div class="champion-card-header">
@@ -882,11 +663,15 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                     <a href="<?php echo esc_url($email_url); ?>" target="_blank" rel="noopener noreferrer">Email</a>
                 </div>
             </div>
-
+            
+            <?php /*
             <div class="champion-col" style="max-width:260px;text-align:center;">
                 <div class="champion-copy-label"><?php echo esc_html__('QR Code (Customer Link)', 'champion-addon'); ?></div>
                 <img src="<?php echo esc_url($qr_code_src); ?>" alt="<?php esc_attr_e('Referral QR Code', 'champion-addon'); ?>" />
             </div>
+            */ ?>
+
+
         </div>
     </div>
 
@@ -1258,12 +1043,15 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             </div>
           </div>
 
+          <?php /*
           <div class="champion-metric">
             <div class="champion-metric-label">Paid Till Date</div>
             <div class="champion-metric-value">
-              <?php echo wc_price( 0 ); ?>
+              <?php //echo wc_price( 0 ); ?>
             </div>
-          </div>
+          </div> */ ?>
+
+
         </div>
     </div>
 

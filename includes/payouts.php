@@ -35,10 +35,13 @@ class Champion_Payouts {
             ? $opts['customer_commission_payout_method']
             : 'wployalty';
 
+
+            
+
         // Get completed orders with unpaid customer commission
         $orders = wc_get_orders( array(
             'limit'   => -1,
-            'status'  => array( 'completed' ),
+            'status'  => array( 'completed','wc-processing' ),
             'meta_key'     => 'champion_commission_amount',
             'meta_compare' => '>',
             'meta_value'   => '0',
@@ -70,36 +73,7 @@ class Champion_Payouts {
              */
             if ( $method === 'wployalty' ) {
 
-               /* do_action(
-                    'champion_wployalty_award_credit',
-                    $ambassador_id,
-                    $amount,
-                    'customer_commission',
-                    array(
-                        'order_id' => $order->get_id(),
-                        'amount'   => $amount,
-                    )
-                );*/
-/*
-                do_action(
-                    'champion_wployalty_award_credit',
-                    $ambassador_id,
-                    $amount,
-                    0, // block_index equivalent for customer commission
-                    (object) array(
-                        'source'   => 'customer_commission',
-                        'order_id' => $order->get_id(),
-                        'amount'   => $amount,
-                    )
-                );*/
-
-
                 $awarded = $this->award_points_via_wployalty_rest( $ambassador_id, $amount );
-
-
-               
-
-
 
                 $payout_ref = 'wployalty';
 

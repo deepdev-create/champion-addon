@@ -247,7 +247,20 @@ class Champion_Dev_Test_Page {
                     </button>
                 </p>
 
-                <hr />
+                
+
+            </form>
+
+            <form method="post" style="margin-top:20px;">
+                <?php wp_nonce_field( 'champion_force_customer_commission_payout' ); ?>
+                <input type="hidden" name="champion_force_customer_commission_payout" value="1" />
+                <button class="button button-secondary">
+                    Force Trigger Customer Commission Payout
+                </button>
+            </form>
+
+
+            <hr />
 
                 <h2>What this tool does</h2>
                 <ol>
@@ -256,16 +269,6 @@ class Champion_Dev_Test_Page {
                     <li>Adds them to parent meta <code>champion_referred_ambassadors</code> (dashboard reflects immediately).</li>
                     <li>Creates completed WooCommerce orders per child (fires status hooks).</li>
                 </ol>
-
-            </form>
-
-            <form method="post" style="margin-top:20px;">
-    <?php wp_nonce_field( 'champion_force_customer_commission_payout' ); ?>
-    <input type="hidden" name="champion_force_customer_commission_payout" value="1" />
-    <button class="button button-secondary">
-        Force Trigger Customer Commission Payout
-    </button>
-</form>
 
         </div>
         <?php

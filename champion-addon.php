@@ -13,6 +13,7 @@ define( 'CHAMPION_ADDON_VERSION', '1.1.0' );
 define( 'CHAMPION_ADDON_PATH', plugin_dir_path( __FILE__ ) );
 define( 'CHAMPION_ADDON_URL', plugin_dir_url( __FILE__ ) );
 
+
 require_once CHAMPION_ADDON_PATH . 'includes/helpers.php';
 require_once CHAMPION_ADDON_PATH . 'includes/milestones.php';
 require_once CHAMPION_ADDON_PATH . 'includes/attachment.php';
@@ -25,6 +26,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/dev-test-page.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-coupon.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-link.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-commission.php';
+require_once CHAMPION_ADDON_PATH . 'includes/wp-enqueue-scripts.php';
 
 
 
