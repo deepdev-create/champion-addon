@@ -17,7 +17,7 @@ class Champion_Admin {
     }
 
     public function menu(){
-        add_submenu_page('tools.php', 'Champion Addon', 'Champion Addon', 'manage_options', 'champion-addon', array($this,'page'));
+        add_submenu_page('woocommerce', 'Champion Addon', 'Champion Addon', 'manage_woocommerce', 'champion-addon', array($this,'page'));
     }
 
     public function register_settings(){
@@ -25,7 +25,7 @@ class Champion_Admin {
     }
 
     public function page(){
-        if ( ! current_user_can('manage_options') ) return;
+        if ( ! current_user_can('manage_woocommerce') ) return;
         $opts = Champion_Helpers::instance()->get_opts();
         $payouts = Champion_Payouts::instance();
         $milestones = $payouts->get_milestones(200);
