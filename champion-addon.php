@@ -126,7 +126,6 @@ add_filter('champion_is_user_ambassador', function( $is, $user_id ){
 
 
 
-
 function champion_create_ambassador_table() {
     
     global $wpdb;
