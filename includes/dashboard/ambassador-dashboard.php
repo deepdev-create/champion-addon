@@ -653,7 +653,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                         </button>
                     </div>
                 </div>
-
+                <?php /*
                 <div class="champion-share-list">
                     <span class="champion-tag-muted"><?php echo esc_html__('Share quickly:', 'champion-addon'); ?></span>
                     <a href="<?php echo esc_url($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer">WhatsApp</a>
@@ -662,6 +662,8 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                     <a href="<?php echo esc_url($telegram_url); ?>" target="_blank" rel="noopener noreferrer">Telegram</a>
                     <a href="<?php echo esc_url($email_url); ?>" target="_blank" rel="noopener noreferrer">Email</a>
                 </div>
+                */ ?>
+
             </div>
             
             <?php /*
@@ -1151,10 +1153,35 @@ document.addEventListener('click', function (e) {
 
 
 // Add menu item
-add_filter('woocommerce_account_menu_items', function($items) {
+/*add_filter('woocommerce_account_menu_items', function($items) {
     $items['champion-dashboard'] = 'Ambassador Dashboard';
     return $items;
-});
+});*/
+
+add_filter( 'woocommerce_account_menu_items', function( $items ) {
+
+    if ( ! is_user_logged_in() ) {
+        return $items;
+    }
+
+    $user_id = get_current_user_id();
+
+    // Use Champion's ambassador check (role + flag + ref code)
+    $is_ambassador = apply_filters(
+        'champion_is_user_ambassador',
+        false,
+        $user_id
+    );
+
+    if ( ! $is_ambassador ) {
+        return $items;
+    }
+
+    $items['champion-dashboard'] = __( 'Ambassador Dashboard', 'champion-addon' );
+
+    return $items;
+}, 20 );
+
 
 // Menu endpoint
 add_action('init', function() {
