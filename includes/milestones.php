@@ -23,6 +23,7 @@ class Champion_Milestones {
         add_action('woocommerce_order_status_completed', array($this, 'on_order_completed'), 20, 1);
 
         // Keep hook for compatibility; payouts class will hook champion_award_milestone later
+        add_action( 'woocommerce_order_status_refunded', array($this, 'champion_on_order_refunded'), 10, 2 );
     }
 
     public function create_tables(){
@@ -86,6 +87,32 @@ class Champion_Milestones {
         $this->increment_child_counter( $user_id, $parent, $order_id, $total );
     }
 
+    public function champion_on_order_refunded( $order_id, $refund_id ) {
+        if ( ! class_exists('WC_Order') ) return;
+        $order = wc_get_order($order_id);
+        if ( ! $order ) return;
+
+        $opts = Champion_Helpers::instance()->get_opts();
+        $min_amount = floatval( $opts['child_order_min_amount'] );
+        $total = floatval( $order->get_total() );
+        if ( $total < $min_amount ) return;
+
+        $user_id = $order->get_user_id();
+        if ( ! $user_id ) return;
+
+        // integrator can provide champion_is_user_ambassador filter
+        $is_amb = apply_filters('champion_is_user_ambassador', false, $user_id);
+        if ( ! $is_amb ) return;
+
+        $parent_meta = $opts['parent_usermeta'];
+        $parent = intval( get_user_meta( $user_id, $parent_meta, true ) );
+        if ( $parent <= 0 ) return;
+
+        // increment
+        $this->decrement_child_counter( $user_id, $parent, $order_id, $total );
+    
+    }
+
     public function increment_child_counter( $child_id, $parent_id, $order_id = 0, $order_total = 0.0 ) {
         
         // per-parent counter table
@@ -140,6 +167,44 @@ class Champion_Milestones {
         }
     }
 
+    public function decrement_child_counter( $child_id, $parent_id, $order_id = 0, $order_total = 0.0 ){
+    
+        $row = $this->wpdb->get_row(
+            $this->wpdb->prepare(
+                "SELECT * FROM {$this->child_table} WHERE child_affiliate_id = %d AND parent_affiliate_id = %d",
+                $child_id,
+                $parent_id
+            )
+        );
+
+        if ( $row ) {
+            $new_count = intval( $row->qualifying_orders ) - 1;
+
+            $this->wpdb->update(
+                $this->child_table,
+                array(
+                    'qualifying_orders' => $new_count,
+                    'last_order_at'     => current_time( 'mysql' ),
+                ),
+                array( 'id' => $row->id ),
+                array( '%d', '%s' ),
+                array( '%d' )
+            );
+
+        }
+
+        $completed = (int) get_user_meta( $child_id, 'champion_completed_orders', true );
+        update_user_meta( $child_id, 'champion_completed_orders', $completed - 1 );
+
+        // $500 bonus ke rule ke hisaab se parent milestones check
+        $opts     = Champion_Helpers::instance()->get_opts();
+        $required = intval( $opts['child_orders_required'] ); // default: 5
+
+        if ( $new_count < $required ) {
+            $this->evaluate_parent_milestones_on_refunded( $parent_id );
+        }
+        
+    }
 
     public function evaluate_parent_milestones( $parent_id ) {
         $opts = Champion_Helpers::instance()->get_opts();
@@ -179,6 +244,32 @@ class Champion_Milestones {
             }
 
         }
+    }
+
+    public function evaluate_parent_milestones_on_refunded( $parent_id ){
+        // Get the latest unpaid milestone (highest block_index)
+        $last_id = $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT id
+                FROM {$this->milestone_table}
+                WHERE parent_affiliate_id = %d
+                AND paid = 0
+                ORDER BY block_index DESC
+                LIMIT 1",
+                $parent_id
+            )
+        );
+
+        // Nothing to delete
+        if ( ! $last_id ) {
+          return;
+        }
+
+        // Delete the row
+        $this->wpdb->delete( $this->milestone_table,
+          array( 'id' => $last_id ),
+          array( '%d' )
+        );
     }
 
     /* Admin getters */
