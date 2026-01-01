@@ -1177,9 +1177,19 @@ add_filter( 'woocommerce_account_menu_items', function( $items ) {
         return $items;
     }
 
-    $items['champion-dashboard'] = __( 'Ambassador Dashboard', 'champion-addon' );
+    $new_items = array();
 
-    return $items;
+    foreach ( $items as $key => $label ) {
+
+       // Insert BEFORE logout
+       if ( 'customer-logout' === $key ) {
+           $new_items['champion-dashboard'] = __( 'Ambassador Dashboard', 'champion-addon' );
+       }
+
+       $new_items[ $key ] = $label;
+    }
+
+    return $new_items;
 }, 20 );
 
 
