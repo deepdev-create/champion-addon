@@ -27,6 +27,8 @@ require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-coupon.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-referral-link.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-commission.php';
 require_once CHAMPION_ADDON_PATH . 'includes/wp-enqueue-scripts.php';
+require_once CHAMPION_ADDON_PATH . 'includes/dashboard/customer-dashboard.php';
+require_once CHAMPION_ADDON_PATH . 'includes/customer-milestones.php';
 
 
 
@@ -35,6 +37,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/wp-enqueue-scripts.php';
 // instantiate singletons
 Champion_Helpers::instance();
 Champion_Milestones::instance();
+Champion_Customer_Milestones::instance();
 Champion_Attachment::instance();
 Champion_WPLoyalty::instance();
 Champion_Payouts::instance();
@@ -50,6 +53,7 @@ Champion_Customer_Commission::instance();
  */
 register_activation_hook( __FILE__, function() {
     Champion_Milestones::instance()->create_tables();
+    Champion_Customer_Milestones::instance()->create_customer_tables();
     Champion_Helpers::instance()->set_defaults();
 
     if ( ! wp_next_scheduled( 'champion_monthly_payout_event' ) ) {
@@ -124,6 +128,22 @@ add_filter('champion_is_user_ambassador', function( $is, $user_id ){
     
 }, 10, 2);
 
+add_filter( 'champion_is_user_customer', function ( $is_customer, $user_id ) {
+
+    if ( ! $user_id ) {
+        return false;
+    }
+
+    // WooCommerce customer = user with customer role
+    $user = get_userdata( $user_id );
+
+    if ( ! $user ) {
+        return false;
+    }
+
+    return in_array( 'customer', (array) $user->roles, true );
+
+}, 10, 2 );
 
 
 function champion_create_ambassador_table() {
