@@ -11,9 +11,7 @@ add_action( 'wp_enqueue_scripts', function () {
     // Check for Champion Dashboard endpoint
     global $wp;
 
-    
-
-    if ( !isset( $wp->query_vars['champion-dashboard'] ) ) {
+    if ( !isset( $wp->query_vars['champion-dashboard'] ) && !isset( $wp->query_vars['champion-customer-dashboard'] ) ) {
         return;
     }
 
