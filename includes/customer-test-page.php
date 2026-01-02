@@ -79,7 +79,7 @@ class Champion_Customer_Test_Page {
 		        }
 		    }
 
-		    if ( $action === 'clear' ) {
+		    /*if ( $action === 'clear' ) {
 		        $result = self::clear_test_data();
 
 		        if ( ! empty( $result['error'] ) ) {
@@ -91,7 +91,7 @@ class Champion_Customer_Test_Page {
 		                intval( $result['users_deleted'] )
 		            );
 		        }
-		    }
+		    }*/
 
 		    /*if ( $action === 'force_payout' ) {
 		        if ( class_exists( 'Champion_Payouts' ) ) {
