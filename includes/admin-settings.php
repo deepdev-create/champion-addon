@@ -375,9 +375,11 @@ class Champion_Admin {
                     </div>
                 </div>
 
+
                 <div class="champion-submit-area">
                     <?php submit_button(); ?>
                 </div>
+
 
             <h2>Milestones (recent)</h2>
             <?php

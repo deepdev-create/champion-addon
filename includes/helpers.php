@@ -75,6 +75,10 @@ class Champion_Helpers {
             // Customer order commission (Ambassador -> Customers)
             'customer_order_commission_type'  => 'percent', // percent|fixed
             'customer_order_commission_value' => 0,         // default 0 to avoid guessing
+            'child_customer_order_min_amount' => 50.00,
+            'child_customer_required_order' => 5,
+            'child_customer_block_size' => 10,
+            'child_customer_bonus_amount' => 100.00,
 
 
         );
