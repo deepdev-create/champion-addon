@@ -73,6 +73,36 @@ register_deactivation_hook( __FILE__, function() {
 });
 
 /**
+ * Safety check: Create tables if they don't exist (for new environments)
+ */
+add_action( 'plugins_loaded', function() {
+    global $wpdb;
+    
+    $tables_to_check = array(
+        $wpdb->prefix . 'champion_ambassadors',
+        $wpdb->prefix . 'champion_child_milestones',
+        $wpdb->prefix . 'champion_parent_milestones',
+        $wpdb->prefix . 'champion_customer_orders',
+        $wpdb->prefix . 'champion_qualified_children',
+        $wpdb->prefix . 'champion_child_milestone_used',
+    );
+    
+    $missing_tables = false;
+    foreach ( $tables_to_check as $table ) {
+        if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+            $missing_tables = true;
+            break;
+        }
+    }
+    
+    if ( $missing_tables ) {
+        Champion_Milestones::instance()->create_tables();
+        Champion_Customer_Milestones::instance()->create_customer_tables();
+        Champion_Helpers::instance()->set_defaults();
+    }
+}, 5 );
+
+/**
  * Cron handling - run monthly payout flow
  */
 add_action( 'champion_monthly_payout_event', function() {

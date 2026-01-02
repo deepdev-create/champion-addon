@@ -7,6 +7,7 @@ if (!defined('ABSPATH')) {
 
 
 function champion_get_ambassador_commission_totals( $ambassador_id ) {
+    global $wpdb;
 
     $ambassador_id = (int) $ambassador_id;
     if ( $ambassador_id <= 0 ) {
@@ -17,51 +18,50 @@ function champion_get_ambassador_commission_totals( $ambassador_id ) {
         ];
     }
 
-    $args = [
-        'limit'      => -1,
-        'status'     => ['processing', 'completed', 'refunded'],
-        'meta_query' => [
-            [
-                'key'   => 'champion_ambassador_id',
-                'value' => $ambassador_id,
-            ]
-        ],
-        'return' => 'objects',
-    ];
+    $posts = $wpdb->posts;
+    $postmeta = $wpdb->postmeta;
+    $month_start = strtotime( date('Y-m-01 00:00:00') );
 
-    $orders = wc_get_orders( $args );
+    // Get all orders where champion_ambassador_id = $ambassador_id
+    // INNER JOIN ensures only posts with the meta key exist
+    $query = $wpdb->prepare(
+        "SELECT p.ID, pm_amb.meta_value as ambassador_id, pm_comm.meta_value as commission, p.post_date
+         FROM {$posts} p
+         INNER JOIN {$postmeta} pm_amb ON (p.ID = pm_amb.post_id AND pm_amb.meta_key = 'champion_ambassador_id')
+         LEFT JOIN {$postmeta} pm_comm ON (p.ID = pm_comm.post_id AND pm_comm.meta_key = 'champion_commission_amount')
+         WHERE p.post_type = 'shop_order'
+         AND p.post_status IN ('wc-processing', 'wc-completed', 'wc-refunded')
+         AND pm_amb.meta_value = %d",
+        $ambassador_id
+    );
+
+    $results = $wpdb->get_results( $query );
 
     $lifetime = 0;
     $this_month = 0;
 
-    $month_start = strtotime( date('Y-m-01 00:00:00') );
+    if ( ! empty( $results ) ) {
+        foreach ( $results as $row ) {
+            $commission = (float) $row->commission;
+            if ( $commission <= 0 ) {
+                continue;
+            }
 
-    foreach ( $orders as $order ) {
+            $lifetime += $commission;
 
-        if ( is_a( $order, 'WC_Order_Refund' ) ) {
-            continue;
-        }
-
-        $commission = (float) $order->get_meta( 'champion_commission_amount', true );
-        if ( $commission <= 0 ) {
-            continue;
-        }
-
-        $lifetime += $commission;
-
-        $created = $order->get_date_created();
-        if ( $created && $created->getTimestamp() >= $month_start ) {
-            $this_month += $commission;
+            // Check if order is this month
+            $order_timestamp = strtotime( $row->post_date );
+            if ( $order_timestamp >= $month_start ) {
+                $this_month += $commission;
+            }
         }
     }
-
 
     /**
      * Paid amount (bonus payouts)
      * Use milestone payout history (paid=1) instead of a user meta that is not maintained reliably.
      */
     $paid = (float) champion_get_ambassador_paid_total_from_milestones( $ambassador_id );
-
 
     return [
         'lifetime'   => round( $lifetime, 2 ),
@@ -111,51 +111,57 @@ function champion_get_customer_orders_stats( $ambassador_id ) {
 }
 
 function champion_get_customer_commission_totals_stats( $ambassador_id ) {
+    global $wpdb;
+
     $ambassador_id = (int) $ambassador_id;
-
-    if ( $ambassador_id <= 0 || ! function_exists( 'wc_get_orders' ) ) {
+    if ( $ambassador_id <= 0 ) {
         return [ 'lifetime' => 0.0, 'this_month' => 0.0 ];
     }
 
-    // Only customers attached to this ambassador
-    $users = get_users([
-        'meta_key'   => 'champion_attached_ambassador',
-        'meta_value' => $ambassador_id,
-        'fields'     => 'ID',
-    ]);
+    // First, get all customer IDs attached to this ambassador
+    $users_query = $wpdb->prepare(
+        "SELECT user_id FROM {$wpdb->usermeta} WHERE meta_key = 'champion_attached_ambassador' AND meta_value = %d",
+        $ambassador_id
+    );
+    $customer_ids = $wpdb->get_col( $users_query );
 
-    if ( empty( $users ) ) {
+    if ( empty( $customer_ids ) ) {
         return [ 'lifetime' => 0.0, 'this_month' => 0.0 ];
     }
 
-    $lifetime    = 0.0;
-    $this_month  = 0.0;
+    $posts = $wpdb->posts;
+    $postmeta = $wpdb->postmeta;
     $month_start = strtotime( date('Y-m-01 00:00:00') );
 
-    foreach ( $users as $uid ) {
+    // Get orders for these customers with their commission amounts
+    $placeholders = implode( ',', array_fill( 0, count( $customer_ids ), '%d' ) );
+    $query = $wpdb->prepare(
+        "SELECT p.ID, pm_comm.meta_value as commission, p.post_date
+         FROM {$posts} p
+         LEFT JOIN {$postmeta} pm_comm ON (p.ID = pm_comm.post_id AND pm_comm.meta_key = 'champion_commission_amount')
+         WHERE p.post_type = 'shop_order'
+         AND p.post_status IN ('wc-processing', 'wc-completed', 'wc-refunded')
+         AND p.post_author IN ({$placeholders})",
+        ...$customer_ids
+    );
 
-        $orders = wc_get_orders([
-            'customer_id' => $uid,
-            'status'      => ['processing', 'completed', 'refunded'],
-            'limit'       => -1,
-            'return'      => 'objects',
-        ]);
+    $results = $wpdb->get_results( $query );
 
-        foreach ( $orders as $order ) {
-            if ( is_a( $order, 'WC_Order_Refund' ) ) {
-                continue;
-            }
+    $lifetime   = 0.0;
+    $this_month = 0.0;
 
-            // Commission is persisted on the order when Champion attribution runs
-            $commission = (float) $order->get_meta( 'champion_commission_amount', true );
+    if ( ! empty( $results ) ) {
+        foreach ( $results as $row ) {
+            $commission = (float) $row->commission;
             if ( $commission <= 0 ) {
                 continue;
             }
 
             $lifetime += $commission;
 
-            $created = $order->get_date_created();
-            if ( $created && $created->getTimestamp() >= $month_start ) {
+            // Check if order is this month
+            $order_timestamp = strtotime( $row->post_date );
+            if ( $order_timestamp >= $month_start ) {
                 $this_month += $commission;
             }
         }
@@ -266,6 +272,114 @@ if (!function_exists('champion_get_ambassador_total_bonus')) {
 }
 
 /**
+ * NEW 10x10x5 HELPERS - Get child ambassador qualification progress
+ */
+if (!function_exists('champion_get_child_qualification_progress')) {
+    /**
+     * For a child ambassador: how many qualifying customers do they have?
+     * Returns array with customer details and progress
+     */
+    function champion_get_child_qualification_progress($child_ambassador_id, $parent_ambassador_id) {
+        if ( ! class_exists('Champion_Customer_Milestones') ) {
+            return array('customers_qualified' => 0, 'customers' => array(), 'is_qualified' => false);
+        }
+
+        $cm = Champion_Customer_Milestones::instance();
+        $customer_records = $cm->get_customer_order_counts($child_ambassador_id, $parent_ambassador_id);
+        $qualifying_customers = $cm->count_qualifying_customers_for_child($child_ambassador_id, $parent_ambassador_id);
+
+        $opts = Champion_Helpers::instance()->get_opts();
+        $orders_required = intval( $opts['child_orders_required'] ) ?: 5;
+        $block_size = intval( $opts['block_size'] ) ?: 10;
+
+        $customers = array();
+        if ($customer_records) {
+            foreach ($customer_records as $record) {
+                $user = get_user_by('id', $record->customer_id);
+                $customers[] = array(
+                    'id' => $record->customer_id,
+                    'name' => $user ? $user->display_name : 'User #' . $record->customer_id,
+                    'orders' => $record->qualifying_orders,
+                    'orders_required' => $orders_required,
+                    'qualified' => $record->qualifying_orders >= $orders_required,
+                );
+            }
+        }
+
+        $is_qualified = intval($qualifying_customers) >= $block_size;
+
+        return array(
+            'customers_qualified' => intval($qualifying_customers),
+            'customers_total' => count($customers),
+            'customers' => $customers,
+            'is_qualified' => $is_qualified,
+            'progress_percent' => min(100, ($qualifying_customers / $block_size) * 100),
+        );
+    }
+}
+
+if (!function_exists('champion_get_parent_bonus_progress')) {
+    /**
+     * For a parent ambassador: how many qualified children do they have available?
+     * Returns milestone progress toward next bonus (Tier 3)
+     * 
+     * Uses setting: block_size (qualified children required for parent bonus)
+     * Returns: available children, used children, total qualified, progress %
+     */
+    function champion_get_parent_bonus_progress($parent_ambassador_id) {
+        if ( ! class_exists('Champion_Customer_Milestones') ) {
+            return array(
+                'qualified_children_available' => 0,
+                'qualified_children_used' => 0,
+                'qualified_children_all' => 0,
+                'progress_percent' => 0,
+                'children' => array(),
+            );
+        }
+
+        $opts = Champion_Helpers::instance()->get_opts();
+        $block_size = intval( $opts['block_size'] ) ?: 10;
+
+        $cm = Champion_Customer_Milestones::instance();
+        $available = $cm->get_available_qualified_children($parent_ambassador_id);
+        $all_qualified = $cm->get_qualified_children($parent_ambassador_id);
+
+        $available_ids = array();
+        if ($available) {
+            foreach ($available as $child) {
+                $available_ids[] = $child->child_ambassador_id;
+            }
+        }
+
+        $used_count = intval(count($all_qualified)) - intval(count($available));
+        $available_count = intval(count($available));
+
+        $children = array();
+        if ($all_qualified) {
+            foreach ($all_qualified as $child) {
+                $is_available = in_array($child->child_ambassador_id, $available_ids, true);
+                $user = get_user_by('id', $child->child_ambassador_id);
+                $children[] = array(
+                    'id' => $child->child_ambassador_id,
+                    'name' => $user ? $user->display_name : 'User #' . $child->child_ambassador_id,
+                    'qualified_at' => $child->qualified_at,
+                    'available' => $is_available,
+                );
+            }
+        }
+
+        return array(
+            'qualified_children_available' => $available_count,
+            'qualified_children_used' => $used_count,
+            'qualified_children_all' => intval(count($all_qualified)),
+            'progress_percent' => min(100, ($available_count / $block_size) * 100),
+            'can_earn_bonus' => $available_count >= $block_size,
+            'children' => $children,
+        );
+    }
+}
+
+/**
  * Helper: Get referred ambassadors
  *
  * Default behaviour:
@@ -305,8 +419,18 @@ if (!function_exists('champion_get_referred_ambassadors')) {
                     continue;
                 }
 
-                $completed_orders = (int) get_user_meta($amb_id, 'champion_completed_orders', true);
-                $qualified        = $completed_orders >= 5; // As per your $500 bonus rule
+                // Child ambassador qualification: check if they have enough qualifying customers
+                $opts_ref = Champion_Helpers::instance()->get_opts();
+                $block_size = intval( $opts_ref['block_size'] ) ?: 10;
+                
+                // Get their qualifying customers count
+                $qual_customers = 0;
+                if ( class_exists('Champion_Customer_Milestones') ) {
+                    $cm = Champion_Customer_Milestones::instance();
+                    $qual_customers = $cm->count_qualifying_customers_for_child($amb_id, $user_id);
+                }
+                
+                $qualified = intval($qual_customers) >= $block_size;
 
                 $ambassadors[] = [
                     'id'               => $amb_id,
@@ -550,18 +674,13 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         $customers      = champion_get_referred_customers($user_id);
         $customer_stats = champion_get_customer_orders_stats($user_id);
         $commissions    = champion_get_ambassador_commissions($user_id, 200);
-        $bonus_progress = champion_get_bonus_progress($user_id);
+        
+        // NEW: Get 10x10x5 milestone progress
+        $bonus_progress = champion_get_parent_bonus_progress($user_id);
 
         $commission_totals = champion_get_ambassador_commission_totals( $user_id );
 
         $customer_commission_totals = champion_get_customer_commission_totals_stats( $user_id );
-
-
-
-        // Use computed bonus if meta is empty
-        if ($total_bonus <= 0 && $bonus_progress['total_bonus_computed'] > 0) {
-            $total_bonus = $bonus_progress['total_bonus_computed'];
-        }
 
         // Social share URLs
         $share_url   = urlencode($links['customer_ref_link']);
@@ -677,10 +796,23 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         </div>
     </div>
 
-    <!-- Overview Stats & Bonus Progress -->
+    <!-- Overview Stats & Milestone Progress -->
     <div class="champion-card">
         <div class="champion-card-header">
-            <div class="champion-card-title"><?php echo esc_html__('Overview', 'champion-addon'); ?></div>
+            <div class="champion-card-title"><?php echo esc_html__('Milestone Progress', 'champion-addon'); ?></div>
+            <div class="champion-card-subtitle" style="font-size: 13px; margin-top: 5px;">
+                <?php 
+                $opts_subtitle = Champion_Helpers::instance()->get_opts();
+                $block_size_subtitle = intval( $opts_subtitle['block_size'] ) ?: 10;
+                $bonus_amount_subtitle = floatval( $opts_subtitle['bonus_amount'] ) ?: 500;
+                printf(
+                    esc_html__('Track your path: %d Customers per Child → %d Qualified Children → $%s Bonus', 'champion-addon'),
+                    $block_size_subtitle,
+                    $block_size_subtitle,
+                    number_format($bonus_amount_subtitle, 2)
+                );
+                ?>
+            </div>
         </div>
 
         <div class="champion-stats-row">
@@ -689,54 +821,143 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 <div class="champion-stat-value"><?php echo esc_html(count($ambassadors)); ?></div>
             </div>
             <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('Qualified Ambassadors', 'champion-addon'); ?></div>
-                <div class="champion-stat-value"><?php echo esc_html($bonus_progress['qualified_count']); ?></div>
-                <div class="champion-stat-sub">
-                    <?php
-                    printf(
-                        esc_html__('%1$s per bonus block', 'champion-addon'),
-                        intval($bonus_progress['cycle_size'])
-                    );
+                <div class="champion-stat-label"><?php echo esc_html__('Fully Qualified Children', 'champion-addon'); ?></div>
+                <div class="champion-stat-value"><?php echo esc_html($bonus_progress['qualified_children_all']); ?></div>
+            </div>
+            <div class="champion-stat-box">
+                <div class="champion-stat-label"><?php echo esc_html__('Available for Next Bonus', 'champion-addon'); ?></div>
+                <div class="champion-stat-value" style="color: #0073aa;">
+                    <?php 
+                    $opts_bonus = Champion_Helpers::instance()->get_opts();
+                    $block_size_bonus = intval( $opts_bonus['block_size'] ) ?: 10;
+                    echo esc_html($bonus_progress['qualified_children_available']) . '/' . esc_html($block_size_bonus);
                     ?>
+                </div>
+                <div style="height: 6px; background: #e0e0e0; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                    <div style="height: 100%; background: #0073aa; width: <?php echo esc_attr($bonus_progress['progress_percent']); ?>%; transition: width 0.3s;"></div>
                 </div>
             </div>
             <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('Referred Customers', 'champion-addon'); ?></div>
-                <div class="champion-stat-value"><?php echo esc_html(count($customers)); ?></div>
+                <div class="champion-stat-label"><?php echo esc_html__('Used Children (Bonuses Earned)', 'champion-addon'); ?></div>
+                <div class="champion-stat-value" style="color: #28a745;"><?php echo esc_html($bonus_progress['qualified_children_used']); ?></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Child Ambassadors - Detailed Qualification View -->
+    <div class="champion-card">
+        <div class="champion-card-header">
+            <div class="champion-card-title"><?php echo esc_html__('Child Ambassadors & Customer Progress', 'champion-addon'); ?></div>
+            <div class="champion-card-subtitle" style="font-size: 13px; margin-top: 5px;">
+                <?php 
+                $opts_children = Champion_Helpers::instance()->get_opts();
+                $block_size_children = intval( $opts_children['block_size'] ) ?: 10;
+                $orders_required_children = intval( $opts_children['child_orders_required'] ) ?: 5;
+                printf(
+                    esc_html__('Each child needs %d customers with %d+ orders to qualify', 'champion-addon'),
+                    $block_size_children,
+                    $orders_required_children
+                );
+                ?>
+            </div>
+        </div>
+
+        <?php if (!empty($ambassadors)) : ?>
+            <div style="overflow-x: auto;">
+                <table class="champion-mini-table" style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e0e0e0; background: #f5f5f5;">
+                            <th style="padding: 8px; text-align: left;"><?php echo esc_html__('Child Ambassador', 'champion-addon'); ?></th>
+                            <th style="padding: 8px; text-align: center;"><?php echo esc_html__('Qual. Customers', 'champion-addon'); ?></th>
+                            <th style="padding: 8px; text-align: center;"><?php echo esc_html__('Status', 'champion-addon'); ?></th>
+                            <th style="padding: 8px; text-align: left;"><?php echo esc_html__('Top Customers', 'champion-addon'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($ambassadors as $amb) : 
+                            $child_progress = champion_get_child_qualification_progress($amb['id'], $user_id);
+                            $is_qualified = $child_progress['is_qualified'];
+                            $qual_count = $child_progress['customers_qualified'];
+                        ?>
+                            <tr style="border-bottom: 1px solid #e0e0e0;">
+                                <td style="padding: 8px;">
+                                    <strong><?php echo esc_html($amb['name']); ?></strong><br>
+                                    <span style="color: #666; font-size: 11px;">ID: <?php echo intval($amb['id']); ?></span>
+                                </td>
+                                <td style="padding: 8px; text-align: center;">
+                                    <span style="font-size: 16px; font-weight: bold; color: <?php echo $is_qualified ? '#28a745' : '#0073aa'; ?>;">
+                                        <?php echo intval($qual_count); ?>/<?php echo intval($opts_children['block_size']) ?: 10; ?>
+                                    </span>
+                                    <div style="height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 4px; width: 100%; overflow: hidden;">
+                                        <div style="height: 100%; background: <?php echo $is_qualified ? '#28a745' : '#0073aa'; ?>; width: <?php echo esc_attr($child_progress['progress_percent']); ?>%;"></div>
+                                    </div>
+                                </td>
+                                <td style="padding: 8px; text-align: center;">
+                                    <?php if ($is_qualified) : ?>
+                                        <span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;">✓ QUALIFIED</span>
+                                    <?php else : ?>
+                                        <span style="background: #ffc107; color: #333; padding: 4px 8px; border-radius: 3px; font-size: 11px;">In Progress</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="padding: 8px; color: #666; font-size: 11px;">
+                                    <?php 
+                                    $cust_sample = array_slice($child_progress['customers'], 0, 3);
+                                    if (!empty($cust_sample)) {
+                                        $names = wp_list_pluck($cust_sample, 'name');
+                                        echo esc_html(implode(', ', $names));
+                                        if (count($child_progress['customers']) > 3) {
+                                            echo ' ...';
+                                        }
+                                    } else {
+                                        echo '—';
+                                    }
+                                    ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php else : ?>
+            <p class="champion-tag-muted">
+                <?php echo esc_html__('You haven\'t referred any child ambassadors yet. Share your ambassador invite link to get started!', 'champion-addon'); ?>
+            </p>
+        <?php endif; ?>
+    </div>
+
+    <!-- Bonus Performance & Commission Summary -->
+    <div class="champion-card">
+        <div class="champion-card-header">
+            <div class="champion-card-title"><?php echo esc_html__('Earnings Summary', 'champion-addon'); ?></div>
+        </div>
+
+        <div class="champion-stats-row">
             <div class="champion-stat-box">
                 <div class="champion-stat-label"><?php echo esc_html__('Total Bonuses Earned', 'champion-addon'); ?></div>
                 <div class="champion-stat-value">
                     <?php echo wp_kses_post(wc_price($total_bonus)); ?>
                 </div>
             </div>
+            <div class="champion-stat-box">
+                <div class="champion-stat-label"><?php echo esc_html__('Lifetime Commission', 'champion-addon'); ?></div>
+                <div class="champion-stat-value">
+                    <?php echo wp_kses_post(wc_price($commission_totals['lifetime'])); ?>
+                </div>
+            </div>
+            <div class="champion-stat-box">
+                <div class="champion-stat-label"><?php echo esc_html__('This Month Commission', 'champion-addon'); ?></div>
+                <div class="champion-stat-value">
+                    <?php echo wp_kses_post(wc_price($commission_totals['this_month'])); ?>
+                </div>
+            </div>
+            <div class="champion-stat-box">
+                <div class="champion-stat-label"><?php echo esc_html__('Commission Paid Out', 'champion-addon'); ?></div>
+                <div class="champion-stat-value" style="color: #28a745;">
+                    <?php echo wp_kses_post(wc_price($commission_totals['paid'])); ?>
+                </div>
+            </div>
         </div>
 
-        <div style="margin-top:18px;">
-            <div class="champion-copy-label">
-                <?php
-                printf(
-                    esc_html__('Current $%1$s bonus progress (%2$s/%3$s qualified ambassadors in this block)', 'champion-addon'),
-                    number_format($bonus_progress['bonus_amount'], 0),
-                    intval($bonus_progress['current_cycle_qualified']),
-                    intval($bonus_progress['cycle_size'])
-                );
-                ?>
-            </div>
-            <div class="champion-progress-bar-outer">
-                <div class="champion-progress-bar-inner" style="width: <?php echo esc_attr($bonus_progress['progress_percent']); ?>%;"></div>
-            </div>
-            <div class="champion-progress-label">
-                <span>
-                    <?php
-                    printf(
-                        esc_html__('%1$s completed bonus block(s)', 'champion-addon'),
-                        intval($bonus_progress['completed_cycles'])
-                    );
-                    ?>
-                </span>
-                <span><?php echo esc_html(round($bonus_progress['progress_percent'])); ?>%</span>
-            </div>
             <div style="margin-top:18px;">
             <?php 
 
@@ -1116,14 +1337,6 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         <?php endif; ?>
     </div>
 
-
-
-
-    
-
-
-
-
 </div>
 
 <script>
@@ -1141,6 +1354,131 @@ document.addEventListener('click', function (e) {
     }
 });
 </script>
+
+<!-- DEBUG: Meta Relations & Data Flow (Remove after debugging) -->
+<hr style="margin-top:60px; border-top: 2px dashed #ccc;">
+<div style="background: #f0f0f0; padding: 20px; margin-top: 20px; border-left: 5px solid #cc0000; font-family: monospace; font-size: 11px; max-height: 600px; overflow-y: auto;">
+    <h4 style="margin-top:0; color: #cc0000;">🔍 DEBUG: Parent-Child Relationship Chain</h4>
+    
+    <?php
+    global $wpdb;
+    $parent_id = intval( $user_id );
+    
+    // STEP 1: Check parent user meta
+    echo "<strong style='color: #0066cc;'>STEP 1: Parent User #{$parent_id} Meta</strong><br>";
+    $parent_meta = $wpdb->get_results( $wpdb->prepare(
+        "SELECT meta_key, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key LIKE 'champion%' ORDER BY meta_key",
+        $parent_id
+    ));
+    
+    if ( ! empty( $parent_meta ) ) {
+        foreach ( $parent_meta as $meta ) {
+            $val = maybe_unserialize( $meta->meta_value );
+            if ( is_array( $val ) ) {
+                echo "  {$meta->meta_key}: [array with " . count( $val ) . " items]<br>";
+                foreach ( $val as $k => $v ) {
+                    echo "    - [{$k}] = {$v}<br>";
+                }
+            } else {
+                echo "  {$meta->meta_key}: {$val}<br>";
+            }
+        }
+    } else {
+        echo "  ❌ No champion meta keys found!<br>";
+    }
+    echo "<br>";
+    
+    // STEP 2: Find children linked to this parent
+    echo "<strong style='color: #0066cc;'>STEP 2: Find Children Linked to Parent #{$parent_id}</strong><br>";
+    $children_by_meta = $wpdb->get_results( $wpdb->prepare(
+        "SELECT user_id, meta_value FROM {$wpdb->usermeta} WHERE meta_key = 'champion_parent_ambassador' AND meta_value = %d",
+        $parent_id
+    ));
+    
+    echo "Children found by champion_parent_ambassador meta: " . count( $children_by_meta ) . "<br>";
+    
+    if ( ! empty( $children_by_meta ) ) {
+        foreach ( $children_by_meta as $child ) {
+            echo "  - Child User #{$child->user_id}<br>";
+            
+            // Check child's meta
+            $child_meta = $wpdb->get_results( $wpdb->prepare(
+                "SELECT meta_key, meta_value FROM {$wpdb->usermeta} WHERE user_id = %d AND meta_key LIKE 'champion%' ORDER BY meta_key",
+                $child->user_id
+            ));
+            
+            if ( ! empty( $child_meta ) ) {
+                foreach ( $child_meta as $meta ) {
+                    echo "    {$meta->meta_key}: {$meta->meta_value}<br>";
+                }
+            }
+        }
+    } else {
+        echo "  ❌ No children found with champion_parent_ambassador = {$parent_id}<br>";
+    }
+    echo "<br>";
+    
+    // STEP 3: Check what's in the database tables
+    echo "<strong style='color: #0066cc;'>STEP 3: Database Tables Status</strong><br>";
+    
+    // Tier 2: Qualified Children
+    $qualified_children = $wpdb->get_results( $wpdb->prepare(
+        "SELECT * FROM {$wpdb->prefix}champion_qualified_children WHERE parent_ambassador_id = %d",
+        $parent_id
+    ));
+    
+    echo "  champion_qualified_children: " . count( $qualified_children ) . " records<br>";
+    foreach ( $qualified_children as $qc ) {
+        echo "    - Child #{$qc->child_ambassador_id}, qualified_at: {$qc->qualified_at}<br>";
+    }
+    echo "<br>";
+    
+    // Tier 1: Customer Orders 
+    echo "  champion_customer_orders:<br>";
+    $all_customer_orders = $wpdb->get_results( $wpdb->prepare(
+        "SELECT * FROM {$wpdb->prefix}champion_customer_orders WHERE parent_ambassador_id = %d",
+        $parent_id
+    ));
+    
+    echo "    Total records for parent: " . count( $all_customer_orders ) . "<br>";
+    if ( ! empty( $all_customer_orders ) ) {
+        foreach ( $all_customer_orders as $co ) {
+            echo "      - Child #{$co->child_ambassador_id}, Customer #{$co->customer_id}, Orders: {$co->qualifying_orders}<br>";
+        }
+    }
+    echo "<br>";
+    
+    // Tier 3: Milestones
+    echo "  champion_milestones:<br>";
+    $milestones = $wpdb->get_results( $wpdb->prepare(
+        "SELECT * FROM {$wpdb->prefix}champion_milestones WHERE parent_affiliate_id = %d ORDER BY block_index DESC",
+        $parent_id
+    ));
+    
+    echo "    Total records for parent: " . count( $milestones ) . "<br>";
+    foreach ( $milestones as $ms ) {
+        echo "      - Block #{$ms->block_index}, Amount: \${$ms->amount}, Paid: {$ms->paid}<br>";
+    }
+    echo "<br>";
+    
+    // STEP 4: Check if children exist at all in system
+    echo "<strong style='color: #0066cc;'>STEP 4: All Children in System</strong><br>";
+    $all_children_in_system = $wpdb->get_results(
+        "SELECT DISTINCT user_id FROM {$wpdb->usermeta} WHERE meta_key = 'champion_parent_ambassador' LIMIT 20"
+    );
+    
+    echo "Total children in system: " . count( $all_children_in_system ) . "<br>";
+    echo "<br>";
+    
+    // Settings
+    echo "<strong style='color: #0066cc;'>STEP 5: Current Settings</strong><br>";
+    $opts = Champion_Helpers::instance()->get_opts();
+    echo "block_size: " . intval( $opts['block_size'] ) . "<br>";
+    echo "child_orders_required: " . intval( $opts['child_orders_required'] ) . "<br>";
+    echo "child_order_min_amount: \$" . floatval( $opts['child_order_min_amount'] ) . "<br>";
+    echo "bonus_amount: \$" . floatval( $opts['bonus_amount'] ) . "<br>";
+    ?>
+</div>
 
 <?php
         return ob_get_clean();
