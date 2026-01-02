@@ -112,7 +112,7 @@ if (!function_exists('champion_customer_get_referred_customers')) {
                 }
 
                 $completed_orders = (int) get_user_meta($amb_id, 'champion_customer_completed_orders', true);
-                $qualified        = $completed_orders >= 5; // As per your $500 bonus rule
+                $qualified        = $completed_orders >= 5; // As per your $100 bonus rule
 
                 $ambassadors[] = [
                     'id'               => $amb_id,
@@ -416,7 +416,7 @@ if ( ! function_exists( 'champion_render_customer_dashboard' ) ) {
                 <div class="champion-card-header">
                     <div class="champion-card-title"><?php echo esc_html__('Referred Customers', 'champion-addon'); ?></div>
                     <div class="champion-card-subtitle">
-                        <?php echo esc_html__('These Customers joined using your invite link and count toward your $500 bonuses.', 'champion-addon'); ?>
+                        <?php echo esc_html__('These Customers joined using your invite link and count toward your $100 bonuses.', 'champion-addon'); ?>
                     </div>
                 </div>
 
