@@ -29,6 +29,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/customer-commission.php';
 require_once CHAMPION_ADDON_PATH . 'includes/wp-enqueue-scripts.php';
 require_once CHAMPION_ADDON_PATH . 'includes/dashboard/customer-dashboard.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-milestones.php';
+require_once CHAMPION_ADDON_PATH . 'includes/customer-test-page.php';
 
 
 
