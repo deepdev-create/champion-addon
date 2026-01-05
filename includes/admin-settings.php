@@ -31,95 +31,355 @@ class Champion_Admin {
         $milestones = $payouts->get_milestones(200);
         $m_engine = Champion_Milestones::instance();
         $counters = $m_engine->get_child_counters();
+        $customer_milestones = Champion_Customer_Milestones::instance();
         ?>
-        <div class="wrap">
-            <h1>Champion Addon</h1>
+        <style>
+            .champion-settings-wrapper {
+                max-width: 1200px;
+                margin: 20px 0;
+            }
 
-            <h2>Settings</h2>
+            .champion-section {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                margin-bottom: 25px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .champion-section-header {
+                padding: 18px 20px;
+                font-size: 16px;
+                font-weight: 600;
+                border-bottom: 3px solid;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .champion-section.tier1 .champion-section-header {
+                background: #fff3cd;
+                border-bottom-color: #ffc107;
+                color: #856404;
+            }
+
+            .champion-section.tier2 .champion-section-header {
+                background: #d4edff;
+                border-bottom-color: #0073aa;
+                color: #003d5c;
+            }
+
+            .champion-section.tier3 .champion-section-header {
+                background: #d4edda;
+                border-bottom-color: #28a745;
+                color: #1e3e21;
+            }
+
+            .champion-section.payout .champion-section-header {
+                background: #e7e7e7;
+                border-bottom-color: #666;
+                color: #333;
+            }
+
+            .champion-section.commission .champion-section-header {
+                background: #f0e6ff;
+                border-bottom-color: #7c3aed;
+                color: #4c1d95;
+            }
+
+            .champion-section-header-icon {
+                font-size: 20px;
+                line-height: 1;
+            }
+
+            .champion-section-content {
+                padding: 20px;
+            }
+
+            .champion-settings-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .champion-settings-table tr {
+                border-bottom: 1px solid #f0f0f0;
+            }
+
+            .champion-settings-table tr:last-child {
+                border-bottom: none;
+            }
+
+            .champion-settings-table th {
+                text-align: left;
+                width: 280px;
+                padding: 16px 15px;
+                font-weight: 600;
+                font-size: 14px;
+                color: #333;
+            }
+
+            .champion-settings-table td {
+                padding: 16px 15px;
+            }
+
+            .champion-settings-table input[type="text"],
+            .champion-settings-table input[type="number"],
+            .champion-settings-table select {
+                min-width: 250px;
+                padding: 8px 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+
+            .champion-settings-table input[type="checkbox"] {
+                width: 20px;
+                height: 20px;
+                cursor: pointer;
+            }
+
+            .description {
+                display: block;
+                color: #666;
+                font-size: 13px;
+                margin-top: 6px;
+                line-height: 1.5;
+            }
+
+            .champion-overview {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 30px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .champion-overview h3 {
+                margin-top: 0;
+                margin-bottom: 15px;
+                font-size: 18px;
+                color: #333;
+            }
+
+            .champion-overview ul {
+                margin: 0;
+                padding: 0;
+                list-style: none;
+            }
+
+            .champion-overview li {
+                padding: 10px 0;
+                border-bottom: 1px solid #f0f0f0;
+                line-height: 1.6;
+            }
+
+            .champion-overview li:last-child {
+                border-bottom: none;
+            }
+
+            .champion-overview strong {
+                color: #0073aa;
+                font-weight: 600;
+            }
+
+            .champion-submit-area {
+                margin-top: 30px;
+                padding: 20px;
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .champion-submit-area .button-primary {
+                background-color: #0073aa;
+                border-color: #005a87;
+                font-size: 15px;
+                padding: 8px 20px;
+            }
+
+            .champion-submit-area .button-primary:hover {
+                background-color: #005a87;
+            }
+        </style>
+
+        <div class="wrap champion-settings-wrapper">
+            <h1>🏆 Champion Addon - 10x10x5 Three-Tier System</h1>
+
+            <div class="champion-overview">
+                <h3>📊 System Overview</h3>
+                <ul>
+                    <li><strong>Tier 1 (Customer):</strong> Each customer must place <?php echo intval($opts['child_orders_required']); ?> orders of $<?php echo floatval($opts['child_order_min_amount']); ?>+ to qualify</li>
+                    <li><strong>Tier 2 (Child Ambassador):</strong> Each child must bring <?php echo intval($opts['block_size']); ?> qualifying customers</li>
+                    <li><strong>Tier 3 (Parent):</strong> Parent receives $<?php echo floatval($opts['bonus_amount']); ?> bonus for every <?php echo intval($opts['block_size']); ?> qualified child ambassadors</li>
+                    <li><strong>Non-Reusable:</strong> Once a child is counted toward a bonus, they cannot be reused</li>
+                </ul>
+            </div>
+
             <form method="post" action="options.php">
                 <?php settings_fields(Champion_Helpers::instance()::OPT_KEY); $options = get_option(Champion_Helpers::instance()::OPT_KEY, Champion_Helpers::instance()->defaults()); ?>
-                <table class="form-table">
-                    <tr><th>Bonus amount</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[bonus_amount]" value="<?php echo esc_attr($options['bonus_amount']); ?>" /></td></tr>
-                    <tr><th>Block size (ambassadors per bonus)</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[block_size]" value="<?php echo esc_attr($options['block_size']); ?>" /></td></tr>
-                    <tr><th>Child orders required</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_orders_required]" value="<?php echo esc_attr($options['child_orders_required']); ?>" /></td></tr>
-                    <tr><th>Child order min amount</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_order_min_amount]" value="<?php echo esc_attr($options['child_order_min_amount']); ?>" /></td></tr>
-                    <tr><th>Attachment window days</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[attachment_window_days]" value="<?php echo esc_attr($options['attachment_window_days']); ?>" /></td></tr>
-                    <tr><th>Award via WPLoyalty (direct credit)</th><td><input type="checkbox" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[award_via_wployalty]" value="1" <?php checked( ! empty($options['award_via_wployalty']) ); ?> /></td></tr>
-                    <tr><th>Min payout amount</th><td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[min_payout_amount]" value="<?php echo esc_attr($options['min_payout_amount']); ?>" /></td></tr>
+                
+                <!-- TIER 1: Customer Qualification -->
+                <div class="champion-section tier1">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">🎯</span>
+                        <span>TIER 1: Customer Qualification</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Settings for individual customer orders</p>
+                        <table class="champion-settings-table">
+                            <tr>
+                                <th>Orders required per customer</th>
+                                <td>
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_orders_required]" value="<?php echo esc_attr($options['child_orders_required']); ?>" />
+                                    <p class="description">A customer becomes qualifying after placing this many orders</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Minimum order amount ($)</th>
+                                <td>
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_order_min_amount]" value="<?php echo esc_attr($options['child_order_min_amount']); ?>" />
+                                    <p class="description">Only orders of this amount or higher count as qualifying</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                    <!-- Customer Commission Settings (New Fields) -->
-                    <tr>
-                        <th>Customer order commission type</th>
-                        <td>
-                            <select name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_type]">
-                              <option value="percent" <?php selected($opts['customer_order_commission_type'] ?? 'percent', 'percent'); ?>>Percent</option>
-                              <option value="fixed" <?php selected($opts['customer_order_commission_type'] ?? 'percent', 'fixed'); ?>>Fixed</option>
-                            </select>
-                        </td>
-                    </tr>
+                <!-- TIER 2: Child Ambassador Qualification -->
+                <div class="champion-section tier2">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">👥</span>
+                        <span>TIER 2: Child Ambassador Qualification</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Settings for child ambassadors under a parent</p>
+                        <table class="champion-settings-table">
+                            <tr>
+                                <th>Customers required per child ambassador</th>
+                                <td>
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[block_size]" value="<?php echo esc_attr($options['block_size']); ?>" />
+                                    <p class="description">A child ambassador becomes qualified after bringing this many qualifying customers</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                    <tr>
-                        <th>Customer order commission value</th>
-                        <td>
-                           <input type="number" step="0.01" name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_value]" value="<?php echo esc_attr($opts['customer_order_commission_value'] ?? 0); ?>" />                        
-                       </td>
-                    </tr>
+                <!-- TIER 3: Parent Bonus -->
+                <div class="champion-section tier3">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">💰</span>
+                        <span>TIER 3: Parent Ambassador Bonus</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Settings for parent ambassador bonuses</p>
+                        <table class="champion-settings-table">
+                            <tr>
+                                <th>Qualified children required for bonus</th>
+                                <td>
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[block_size_for_bonus]" value="<?php echo esc_attr($options['block_size']); ?>" disabled style="background-color: #f5f5f5; cursor: not-allowed;" />
+                                    <p class="description">Same as "Customers required per child ambassador" above. Parent receives a bonus after having this many qualified children.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Bonus amount per parent</th>
+                                <td>
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[bonus_amount]" value="<?php echo esc_attr($options['bonus_amount']); ?>" />
+                                    <p class="description">Parent receives this amount when they earn each bonus</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                    <!-- New fields for Customer Commission Payout -->
-                    <tr>
-                        <th>Customer commission minimum payout</th>
-                        <td><input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_minimum_payout]" value="<?php echo esc_attr($opts['customer_commission_minimum_payout'] ?? 100); ?>" /></td>
-                    </tr>
+                <!-- Payout & Attachment Settings -->
+                <div class="champion-section payout">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">⚙️</span>
+                        <span>Payout & Attachment Settings</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <table class="champion-settings-table">
+                            <tr>
+                                <th>Award via WPLoyalty</th>
+                                <td>
+                                    <input type="checkbox" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[award_via_wployalty]" value="1" <?php checked( ! empty($options['award_via_wployalty']) ); ?> />
+                                    <p class="description">If checked, milestones are awarded as WPLoyalty points. If unchecked, they are awarded as discount coupons.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Minimum payout amount</th>
+                                <td>
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[min_payout_amount]" value="<?php echo esc_attr($options['min_payout_amount']); ?>" />
+                                    <p class="description">Minimum commission/bonus required to process payout</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Customer attachment window (days)</th>
+                                <td>
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[attachment_window_days]" value="<?php echo esc_attr($options['attachment_window_days']); ?>" />
+                                    <p class="description">How long a customer remains attached to an ambassador after initial visit</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                    <tr>
-                        <th>Customer commission payout method</th>
-                        <td>
-                            <select name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_payout_method]">
-                                <option value="coupon" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'coupon'); ?>>Coupon</option>
-                                <option value="wployalty" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'wployalty'); ?>>WPLoyalty Points</option>
-                            </select>
-                        </td>
-                    </tr>
+                <!-- Customer Commission Settings -->
+                <div class="champion-section commission">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">💵</span>
+                        <span>Customer Commission Settings (Ambassador → Customers)</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Commission earned by ambassadors from their referred customers' orders</p>
+                        <table class="champion-settings-table">
+                            <tr>
+                                <th>Commission type</th>
+                                <td>
+                                    <select name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_type]">
+                                      <option value="percent" <?php selected($opts['customer_order_commission_type'] ?? 'percent', 'percent'); ?>>Percent of Order Total</option>
+                                      <option value="fixed" <?php selected($opts['customer_order_commission_type'] ?? 'percent', 'fixed'); ?>>Fixed Amount per Order</option>
+                                    </select>
+                                    <p class="description">How commission is calculated for each customer order</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Commission value</th>
+                                <td>
+                                   <input type="number" step="0.01" name="<?php echo Champion_Helpers::OPT_KEY; ?>[customer_order_commission_value]" value="<?php echo esc_attr($opts['customer_order_commission_value'] ?? 0); ?>" />
+                                   <p class="description">If percent: enter 5 for 5%. If fixed: enter 2.50 for $2.50 per order</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Commission minimum payout</th>
+                                <td>
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_minimum_payout]" value="<?php echo esc_attr($opts['customer_commission_minimum_payout'] ?? 100); ?>" />
+                                    <p class="description">Minimum commission balance before customer can request payout</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Commission payout method</th>
+                                <td>
+                                    <select name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_payout_method]">
+                                        <option value="coupon" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'coupon'); ?>>Discount Coupon</option>
+                                        <option value="wployalty" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'wployalty'); ?>>WPLoyalty Points</option>
+                                    </select>
+                                    <p class="description">How commissions are paid out to customers</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                    <tr class="row-separator">
-                        <td colspan="2" style="padding: 12px 0; border-top: 2px solid #b5b5b5;"></td>
-                    </tr>
 
-                    <tr class="section-title">
-                        <td colspan="2" style="padding: 10px 0; font-weight: 600; font-size: 1.3em; color: #1d2327;">Customer to Customer Referral Bonus Settings</td>
-                    </tr>
+                <div class="champion-submit-area">
+                    <?php submit_button(); ?>
+                </div>
 
-                    <tr>
-                        <th>Customer min order amount</th>
-                        <td>
-                            <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_order_min_amount]" value="<?php echo esc_attr($options['child_customer_order_min_amount']); ?>" />
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th>Required customer order</th>
-                        <td>
-                            <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_required_order]" value="<?php echo esc_attr($options['child_customer_required_order']); ?>" />
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th>Customer block size</th>
-                        <td>
-                            <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_block_size]" value="<?php echo esc_attr($options['child_customer_block_size']); ?>" />
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th>Customer bonus amount</th>
-                        <td>
-                            <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_bonus_amount]" value="<?php echo esc_attr($options['child_customer_bonus_amount']); ?>" />
-                        </td>
-                    </tr>
-
-                </table>
-                <?php submit_button(); ?>
-            </form>
 
             <h2>Milestones (recent)</h2>
             <?php

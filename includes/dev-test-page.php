@@ -104,12 +104,16 @@ class Champion_Dev_Test_Page {
         $products = self::get_products_list();
 
         // Defaults
+        $default_child_count      = 10;
         $default_orders_per_child = 5;
         $default_min_amount       = 0;
         $amb_meta_key             = 'is_ambassador';
 
         if ( class_exists( 'Champion_Helpers' ) ) {
             $opts = Champion_Helpers::instance()->get_opts();
+            if ( ! empty( $opts['block_size'] ) ) {
+                $default_child_count = max( 1, intval( $opts['block_size'] ) );
+            }
             if ( ! empty( $opts['child_orders_required'] ) ) {
                 $default_orders_per_child = max( 1, intval( $opts['child_orders_required'] ) );
             }
@@ -187,7 +191,8 @@ class Champion_Dev_Test_Page {
                     <tr>
                         <th scope="row"><label for="champion_child_count">Number of child ambassadors</label></th>
                         <td>
-                            <input type="number" name="champion_child_count" id="champion_child_count" min="1" max="200" value="10" />
+                            <input type="number" name="champion_child_count" id="champion_child_count" min="1" max="200" value="<?php echo esc_attr( $default_child_count ); ?>" />
+                            <p class="description">Default pulled from Champion settings (block_size = <?php echo esc_html( $default_child_count ); ?>).</p>
                         </td>
                     </tr>
 
@@ -202,8 +207,9 @@ class Champion_Dev_Test_Page {
                     <tr>
                         <th scope="row"><label for="champion_order_total_override">Order total override (optional)</label></th>
                         <td>
-                            <input type="number" step="0.01" min="0" name="champion_order_total_override" id="champion_order_total_override" value="" placeholder="<?php echo esc_attr( $default_min_amount > 0 ? $default_min_amount : '50.00' ); ?>" />
+                            <input type="number" step="0.01" min="0" name="champion_order_total_override" id="champion_order_total_override" value="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '' ); ?>" placeholder="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '50.00' ); ?>" />
                             <p class="description">
+                                Default pulled from Champion settings (child_order_min_amount = <?php echo esc_html( number_format( $default_min_amount, 2 ) ); ?>).
                                 If set, each created order will be adjusted to this exact total (example: 49, 50, 51).
                                 If empty, order total will be based on product price/qty meeting min amount.
                             </p>
@@ -288,16 +294,29 @@ class Champion_Dev_Test_Page {
             return array( 'error' => 'Selected product could not be loaded.' );
         }
 
-        // Determine settings defaults.
-        $orders_per_child = 5;
-        $min_amount       = 0;
-        $amb_meta_key     = 'is_ambassador';
+        // Determine settings defaults - aligned with 10x10x5 structure
+        // TIER 1: Orders required per customer (default from settings or 5)
+        $orders_per_customer = 5;
+        // TIER 2: Customers required per child ambassador (default from settings or 10)
+        $customers_per_child = 10;
+        // TIER 1: Minimum order amount $ (default from settings or 0)
+        $min_amount          = 0;
+        $amb_meta_key        = 'is_ambassador';
 
         if ( class_exists( 'Champion_Helpers' ) ) {
             $opts = Champion_Helpers::instance()->get_opts();
+            
+            // TIER 1: Read from settings - how many orders per customer to qualify
             if ( ! empty( $opts['child_orders_required'] ) ) {
-                $orders_per_child = max( 1, intval( $opts['child_orders_required'] ) );
+                $orders_per_customer = max( 1, intval( $opts['child_orders_required'] ) );
             }
+            
+            // TIER 2 & TIER 3: Read from settings - customers per child (Tier 2) = children per bonus (Tier 3)
+            if ( ! empty( $opts['block_size'] ) ) {
+                $customers_per_child = max( 1, intval( $opts['block_size'] ) );
+            }
+            
+            // TIER 1: Read from settings - minimum order amount for qualifying
             if ( isset( $opts['child_order_min_amount'] ) ) {
                 $min_amount = floatval( $opts['child_order_min_amount'] );
             }
@@ -306,9 +325,9 @@ class Champion_Dev_Test_Page {
             }
         }
 
-        // Overrides
+        // Overrides - allow test to specify custom values
         if ( intval( $orders_per_child_in ) > 0 ) {
-            $orders_per_child = max( 1, intval( $orders_per_child_in ) );
+            $orders_per_customer = max( 1, intval( $orders_per_child_in ) );
         }
 
         $order_total_override = floatval( $total_override_in );
@@ -335,34 +354,108 @@ class Champion_Dev_Test_Page {
         }
 
         // Dev test: suppress immediate award/payout while generating orders.
-        // Milestones will still be created, but do_action('champion_award_milestone', ...) will be skipped.
-        // This keeps payout controlled by "Force Trigger Monthly Payout".
-        set_transient( 'champion_suppress_awards', 1, 10 * MINUTE_IN_SECONDS );
+        set_transient( 'champion_suppress_awards', 1, 30 * MINUTE_IN_SECONDS );
 
+        // Disable WooCommerce email notifications
+        add_filter( 'woocommerce_order_created_notice_email_enabled', '__return_false' );
+
+        // Batch insert tracking (instead of options update per item)
+        $batch_created_users  = array();
+        $batch_created_orders = array();
 
         $children_created = 0;
         $orders_created   = 0;
 
+        // 10x10x5 TEST DATA GENERATION STRUCTURE:
+        // Loop 1: Create N child ambassadors (from $child_count)
+        // Loop 2: For each child, create M customers (from $customers_per_child = block_size)
+        // Loop 3: For each customer, create K orders (from $orders_per_customer = child_orders_required)
+        //
+        // Example with defaults (block_size=10, child_orders_required=5):
+        // - Parent → 10 children → 100 customers (10 per child) → 500 orders (5 per customer)
+        //
+        // Example with test settings (block_size=2, child_orders_required=2):
+        // - Parent → 2 children → 4 customers (2 per child) → 8 orders (2 per customer)
+        
         for ( $i = 1; $i <= $child_count; $i++ ) {
-            $user_id = self::create_child_user( $parent_id, $i, $amb_meta_key );
-            if ( ! $user_id ) continue;
+            $child_user_id = self::create_child_user( $parent_id, $i, $amb_meta_key );
+            if ( ! $child_user_id ) continue;
 
             $children_created++;
+            $batch_created_users[] = $child_user_id;
 
-            for ( $j = 1; $j <= $orders_per_child; $j++ ) {
-                $order_id = self::create_completed_order_for_user( $user_id, $product, $quantity, $order_total_override );
-                if ( $order_id ) $orders_created++;
+            // Create 10 customers for this child ambassador
+            for ( $c = 1; $c <= $customers_per_child; $c++ ) {
+                $customer_id = self::create_test_customer( $parent_id, $child_user_id, $c, $batch_created_users );
+                if ( ! $customer_id ) continue;
+
+                // Each customer places 5 orders
+                for ( $j = 1; $j <= $orders_per_customer; $j++ ) {
+                    $order_id = self::create_completed_order_for_user( $customer_id, $product, $quantity, $order_total_override, $batch_created_orders );
+                    if ( $order_id ) $orders_created++;
+                }
             }
         }
 
-        delete_transient( 'champion_suppress_awards' );
+        // Batch save created users at the end
+        if ( ! empty( $batch_created_users ) ) {
+            $existing = get_option( self::OPT_CREATED_USERS, array() );
+            if ( ! is_array( $existing ) ) $existing = array();
+            $all = array_merge( $existing, $batch_created_users );
+            update_option( self::OPT_CREATED_USERS, array_values( array_unique( $all ) ), false );
+        }
 
+        // Batch save created orders at the end
+        if ( ! empty( $batch_created_orders ) ) {
+            $existing = get_option( self::OPT_CREATED_ORDERS, array() );
+            if ( ! is_array( $existing ) ) $existing = array();
+            $all = array_merge( $existing, $batch_created_orders );
+            update_option( self::OPT_CREATED_ORDERS, array_values( array_unique( $all ) ), false );
+        }
+
+        remove_filter( 'woocommerce_order_created_notice_email_enabled', '__return_false' );
+        delete_transient( 'champion_suppress_awards' );
 
         return array(
             'child_created'    => $children_created,
             'orders_created'   => $orders_created,
-            'orders_per_child' => $orders_per_child,
+            'orders_per_child' => $orders_per_customer,
         );
+    }
+
+    /**
+     * Create a test customer and attach them to a child ambassador.
+     */
+    protected static function create_test_customer( $parent_id, $child_ambassador_id, $index, &$batch_users = null ) {
+        $run_id   = time();
+        $username = sprintf( 'champ_cust_%d_%d_%d', $parent_id, $run_id, $index );
+        $email    = sprintf( 'champ_cust_%d_%d_%d@example.com', $parent_id, $run_id, $index );
+        
+        $password = wp_generate_password( 12, true );
+
+        $user_id = wp_insert_user( array(
+            'user_login' => $username,
+            'user_email' => $email,
+            'user_pass'  => $password,
+            'role'       => 'customer',
+        ) );
+
+        if ( is_wp_error( $user_id ) ) return false;
+
+        // Attach to child ambassador
+        update_user_meta( $user_id, 'champion_attached_ambassador', $child_ambassador_id );
+
+        // Track created users (batch mode: add to array, save later)
+        if ( is_array( $batch_users ) ) {
+            $batch_users[] = intval( $user_id );
+        } else {
+            $created = get_option( self::OPT_CREATED_USERS, array() );
+            if ( ! is_array( $created ) ) $created = array();
+            $created[] = intval( $user_id );
+            update_option( self::OPT_CREATED_USERS, array_values( array_unique( $created ) ), false );
+        }
+
+        return $user_id;
     }
 
     protected static function create_child_user( $parent_id, $index, $amb_meta_key ) {
@@ -407,7 +500,7 @@ class Champion_Dev_Test_Page {
         return $user_id;
     }
 
-    protected static function create_completed_order_for_user( $user_id, $product, $quantity, $order_total_override ) {
+    protected static function create_completed_order_for_user( $user_id, $product, $quantity, $order_total_override, &$batch_orders = null ) {
         try {
             $order = wc_create_order();
             if ( is_wp_error( $order ) ) return false;
@@ -447,11 +540,15 @@ class Champion_Dev_Test_Page {
 
             $order_id = $order->get_id();
 
-            // Track created orders for safe cleanup
-            $created = get_option( self::OPT_CREATED_ORDERS, array() );
-            if ( ! is_array( $created ) ) $created = array();
-            $created[] = intval( $order_id );
-            update_option( self::OPT_CREATED_ORDERS, array_values( array_unique( $created ) ), false );
+            // Track created orders (batch mode: add to array, save later)
+            if ( is_array( $batch_orders ) ) {
+                $batch_orders[] = intval( $order_id );
+            } else {
+                $created = get_option( self::OPT_CREATED_ORDERS, array() );
+                if ( ! is_array( $created ) ) $created = array();
+                $created[] = intval( $order_id );
+                update_option( self::OPT_CREATED_ORDERS, array_values( array_unique( $created ) ), false );
+            }
 
             return $order_id;
 
@@ -503,12 +600,18 @@ class Champion_Dev_Test_Page {
         update_option( self::OPT_CREATED_USERS, array(), false );
 
         // 3) Clear counters/milestones tables (dev only)
-        $child_table     = $wpdb->prefix . 'champion_child_counters';
-        $milestones_table= $wpdb->prefix . 'champion_milestones';
+        $child_table              = $wpdb->prefix . 'champion_child_counters';
+        $milestones_table         = $wpdb->prefix . 'champion_milestones';
+        $customer_orders_table    = $wpdb->prefix . 'champion_customer_orders';
+        $qualified_children_table = $wpdb->prefix . 'champion_qualified_children';
+        $child_milestone_used_table = $wpdb->prefix . 'champion_child_milestone_used';
 
         // Tables may not exist on very fresh installs; ignore errors.
         $wpdb->query( "TRUNCATE TABLE {$child_table}" );
         $wpdb->query( "TRUNCATE TABLE {$milestones_table}" );
+        $wpdb->query( "TRUNCATE TABLE {$customer_orders_table}" );
+        $wpdb->query( "TRUNCATE TABLE {$qualified_children_table}" );
+        $wpdb->query( "TRUNCATE TABLE {$child_milestone_used_table}" );
 
         return array(
             'orders_deleted' => $orders_deleted,
@@ -519,6 +622,7 @@ class Champion_Dev_Test_Page {
     protected static function get_users_for_dropdown() {
         return get_users( array(
             'number' => 500,
+            'role' => 'ambassador',
             'fields' => array( 'ID', 'display_name', 'user_email', 'roles' ),
         ) );
     }

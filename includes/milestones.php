@@ -20,10 +20,10 @@ class Champion_Milestones {
         $this->child_table = $wpdb->prefix . 'champion_child_counters';
         $this->milestone_table = $wpdb->prefix . 'champion_milestones';
 
-        add_action('woocommerce_order_status_completed', array($this, 'on_order_completed'), 20, 1);
-
-        // Keep hook for compatibility; payouts class will hook champion_award_milestone later
-        add_action( 'woocommerce_order_status_refunded', array($this, 'champion_on_order_refunded'), 10, 2 );
+        // DEPRECATED: Order processing now handled by Champion_Customer_Milestones class
+        // which implements the new 10x10x5 three-tier system
+        // add_action('woocommerce_order_status_completed', array($this, 'on_order_completed'), 20, 1);
+        // add_action( 'woocommerce_order_status_refunded', array($this, 'champion_on_order_refunded'), 10, 2 );
     }
 
     public function create_tables(){
