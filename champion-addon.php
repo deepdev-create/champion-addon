@@ -29,6 +29,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/customer-commission.php';
 require_once CHAMPION_ADDON_PATH . 'includes/wp-enqueue-scripts.php';
 require_once CHAMPION_ADDON_PATH . 'includes/dashboard/customer-dashboard.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-milestones.php';
+require_once CHAMPION_ADDON_PATH . 'includes/customer-orders-milestones.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-test-page.php';
 
 
@@ -39,6 +40,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/customer-test-page.php';
 Champion_Helpers::instance();
 Champion_Milestones::instance();
 Champion_Customer_Milestones::instance();
+Champion_Customer_Orders_Milestones::instance();
 Champion_Attachment::instance();
 Champion_WPLoyalty::instance();
 Champion_Payouts::instance();
@@ -55,6 +57,7 @@ Champion_Customer_Commission::instance();
 register_activation_hook( __FILE__, function() {
     Champion_Milestones::instance()->create_tables();
     Champion_Customer_Milestones::instance()->create_customer_tables();
+    Champion_Customer_Orders_Milestones::instance()->create_customer_tables();
     Champion_Helpers::instance()->set_defaults();
 
     if ( ! wp_next_scheduled( 'champion_monthly_payout_event' ) ) {
@@ -108,6 +111,7 @@ add_action( 'plugins_loaded', function() {
  */
 add_action( 'champion_monthly_payout_event', function() {
     Champion_Payouts::instance()->process_monthly_payouts();
+    Champion_Payouts::instance()->process_customer_monthly_payouts();
 });
 
 function champion_add_ambassador_role() {
