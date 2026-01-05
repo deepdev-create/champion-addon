@@ -79,8 +79,8 @@ class Champion_Customer_Test_Page {
 		        }
 		    }
 
-		    /*if ( $action === 'clear' ) {
-		        $result = self::clear_test_data();
+		    if ( $action === 'clear' ) {
+		        $result = self::customer_clear_test_data();
 
 		        if ( ! empty( $result['error'] ) ) {
 		            $error = $result['error'];
@@ -91,22 +91,31 @@ class Champion_Customer_Test_Page {
 		                intval( $result['users_deleted'] )
 		            );
 		        }
-		    }*/
+		    }
 
-		    /*if ( $action === 'force_payout' ) {
+		    if ( $action === 'force_payout' ) {
 		        if ( class_exists( 'Champion_Payouts' ) ) {
-		            Champion_Payouts::instance()->process_monthly_payouts();
+		            Champion_Payouts::instance()->process_customer_monthly_payouts();
 		            $message = 'Monthly payout triggered successfully (manual run).';
 		        } else {
 		            $error = 'Champion_Payouts class not found.';
 		        }
-		    }*/
+		    }
 		}
 
 		?>
 		<div class="wrap">
 		    <h1>Champion Customer Test Tools</h1>
 		    <p><strong>WARNING:</strong> Developer/staging only. This will create real users and real orders.</p>
+
+            <h2>What this tool does</h2>
+            <ol>
+                <li>Creates N child customer users (role + meta).</li>
+                <li>Links them to the selected parent via <code>champion_parent_customer</code>.</li>
+                <li>Adds them to parent meta <code>champion_referred_customers</code> (dashboard reflects immediately).</li>
+                <li>Creates completed WooCommerce orders per child (fires status hooks).</li>
+            </ol>
+    		<hr />
 
 		    <?php if ( ! empty( $error ) ) : ?>
 		        <div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div>
@@ -207,22 +216,12 @@ class Champion_Customer_Test_Page {
 		    </form>
 
 		    <!-- <form method="post" style="margin-top:20px;">
-		        <?php // wp_nonce_field( 'champion_force_customer_commission_payout' ); ?>
+		        <?php //wp_nonce_field( 'champion_force_customer_commission_payout' ); ?>
 		        <input type="hidden" name="champion_force_customer_commission_payout" value="1" />
 		        <button class="button button-secondary">
 		            Force Trigger Customer Commission Payout
 		        </button>
 		    </form> -->
-
-		    <hr />
-
-		        <h2>What this tool does</h2>
-		        <ol>
-		            <li>Creates N child ambassador users (role + meta).</li>
-		            <li>Links them to the selected parent via <code>champion_parent_ambassador</code>.</li>
-		            <li>Adds them to parent meta <code>champion_referred_ambassadors</code> (dashboard reflects immediately).</li>
-		            <li>Creates completed WooCommerce orders per child (fires status hooks).</li>
-		        </ol>
 
 		</div>
 		<?php
@@ -403,6 +402,105 @@ class Champion_Customer_Test_Page {
 	    }
 	}
 
+	protected static function customer_clear_test_data() {
+
+	    error_log('=== CLEAR TEST DATA START ===');
+
+	    if ( ! class_exists( 'WooCommerce' ) ) {
+	        error_log('WooCommerce NOT loaded');
+	        return array( 'error' => 'WooCommerce not loaded' );
+	    }
+
+	    global $wpdb;
+
+	    $orders_deleted = 0;
+	    $users_deleted  = 0;
+
+	    // ---- LOAD OPTIONS ----
+	    $order_ids = get_option( self::OPT_CUS_CREATED_ORDERS, array() );
+	    $user_ids  = get_option( self::OPT_CUS_CREATED_USERS, array() );
+
+	    error_log('Orders option: ' . print_r($order_ids, true));
+	    error_log('Users option: ' . print_r($user_ids, true));
+
+	    // ---- DELETE ORDERS ----
+	    if ( is_array( $order_ids ) ) {
+	        foreach ( $order_ids as $order_id ) {
+
+	            $order_id = (int) $order_id;
+	            if ( $order_id <= 0 ) continue;
+
+	            $post = get_post( $order_id );
+	            if ( ! $post ) {
+	                error_log("Order {$order_id} NOT FOUND");
+	                continue;
+	            }
+
+	            wp_delete_post( $order_id, true );
+	            $orders_deleted++;
+
+	            error_log("Order {$order_id} deleted");
+	        }
+	    }
+
+	    // ---- DELETE USERS ----
+	    if ( is_array( $user_ids ) ) {
+	        require_once ABSPATH . 'wp-admin/includes/user.php';
+
+	        foreach ( $user_ids as $user_id ) {
+
+	            $user_id = (int) $user_id;
+	            if ( $user_id <= 0 ) continue;
+
+	            // Never delete logged-in user
+	            if ( get_current_user_id() === $user_id ) {
+	                error_log("Skipping current user {$user_id}");
+	                continue;
+	            }
+
+	            $user = get_user_by( 'id', $user_id );
+	            if ( ! $user ) {
+	                error_log("User {$user_id} NOT FOUND");
+	                continue;
+	            }
+
+	            wp_delete_user( $user_id );
+	            $users_deleted++;
+
+	            error_log("User {$user_id} deleted");
+	        }
+	    }
+
+	    // ---- CLEAR OPTIONS ----
+	    delete_option( self::OPT_CUS_CREATED_ORDERS );
+	    delete_option( self::OPT_CUS_CREATED_USERS );
+
+	    error_log('Options cleared');
+
+	    // ---- TRUNCATE CUSTOM TABLES (SAFE) ----
+	    $child_table      = $wpdb->prefix . 'champion_child_customer_counters';
+	    $milestones_table = $wpdb->prefix . 'champion_customer_milestones';
+
+	    $tables = $wpdb->get_col( "SHOW TABLES LIKE '{$wpdb->prefix}champion_%'" );
+
+	    if ( in_array( $child_table, $tables, true ) ) {
+	        $wpdb->query( "TRUNCATE TABLE {$child_table}" );
+	        error_log("Table truncated: {$child_table}");
+	    }
+
+	    if ( in_array( $milestones_table, $tables, true ) ) {
+	        $wpdb->query( "TRUNCATE TABLE {$milestones_table}" );
+	        error_log("Table truncated: {$milestones_table}");
+	    }
+
+	    error_log('=== CLEAR TEST DATA END ===');
+
+	    return array(
+	        'orders_deleted' => $orders_deleted,
+	        'users_deleted'  => $users_deleted,
+	    );
+	}
+	
 	protected static function get_customer_for_dropdown() {
 	    return get_users( array(
 	    	'role'   => 'customer',

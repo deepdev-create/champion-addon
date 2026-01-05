@@ -371,6 +371,43 @@ class Champion_Admin {
                                     <p class="description">How commissions are paid out to customers</p>
                                 </td>
                             </tr>
+
+                            <tr class="row-separator">
+                                <td colspan="2" style="padding: 12px 0; border-top: 2px solid #b5b5b5;"></td>
+                            </tr>
+
+                            <tr class="section-title">
+                                <td colspan="2" style="padding: 10px 0; font-weight: 600; font-size: 1.3em; color: #1d2327;">Customer to Customer Referral Bonus Settings</td>
+                            </tr>
+
+                            <tr>
+                                <th>Customer min order amount</th>
+                                <td>
+                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_order_min_amount]" value="<?php echo esc_attr($options['child_customer_order_min_amount']); ?>" />
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Required customer order</th>
+                                <td>
+                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_required_order]" value="<?php echo esc_attr($options['child_customer_required_order']); ?>" />
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Customer block size</th>
+                                <td>
+                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_block_size]" value="<?php echo esc_attr($options['child_customer_block_size']); ?>" />
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Customer bonus amount</th>
+                                <td>
+                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_bonus_amount]" value="<?php echo esc_attr($options['child_customer_bonus_amount']); ?>" />
+                                </td>
+                            </tr>
+
                         </table>
                     </div>
                 </div>
