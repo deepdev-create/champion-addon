@@ -315,21 +315,50 @@ class Champion_Payouts {
         $min = floatval($opts['min_payout_amount']);
 
         $now  = current_time( 'mysql' );
+        // Process all unpaid milestones that have been awarded (awarded_at is set)
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT * FROM {$this->milestones_table} WHERE paid = 0 AND awarded_at IS NOT NULL AND awarded_at <= %s",
+                "SELECT * FROM {$this->milestones_table} WHERE paid = 0 AND awarded_at IS NOT NULL AND awarded_at <= %s ORDER BY awarded_at ASC",
                 $now
             )
         );
 
-        
+        if ( empty($rows) ) {
+            Champion_Helpers::log('process_monthly_payouts: No unpaid milestones found');
+            return;
+        }
 
-        if ( empty($rows) ) return;
+        Champion_Helpers::log('process_monthly_payouts: Processing ' . count($rows) . ' unpaid milestones');
 
         foreach ( $rows as $r ) {
             // if amount less than min and not allowed, skip
-            if ( floatval($r->amount) < $min ) continue;
-            // create coupon via default handler
+            if ( floatval($r->amount) < $min ) {
+                Champion_Helpers::log('process_monthly_payouts: Skipping milestone ' . $r->id . ' - amount below minimum', array(
+                    'milestone_id' => $r->id,
+                    'amount' => $r->amount,
+                    'min_amount' => $min,
+                ));
+                continue;
+            }
+            
+            // Check if already paid (double-check to prevent duplicate payouts)
+            if ( intval($r->paid) === 1 || intval($r->coupon_id) > 0 ) {
+                Champion_Helpers::log('process_monthly_payouts: Skipping milestone ' . $r->id . ' - already paid', array(
+                    'milestone_id' => $r->id,
+                    'paid' => $r->paid,
+                    'coupon_id' => $r->coupon_id,
+                ));
+                continue;
+            }
+            
+            // Trigger award action (WPLoyalty or coupon handler will process)
+            Champion_Helpers::log('process_monthly_payouts: Processing milestone ' . $r->id, array(
+                'milestone_id' => $r->id,
+                'parent_id' => $r->parent_affiliate_id,
+                'amount' => $r->amount,
+                'block_index' => $r->block_index,
+            ));
+            
             do_action('champion_award_milestone', intval($r->parent_affiliate_id), floatval($r->amount), intval($r->block_index));
         }
 

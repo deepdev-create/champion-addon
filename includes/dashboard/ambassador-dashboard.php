@@ -987,7 +987,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                         if ( intval( $row->coupon_id ) > 0 ) {
                             $status = 'Paid (Coupon)';
                         } else {
-                            $status = 'Paid (WPLoyalty)';
+                            $status = 'Paid (Points)';
                         }
                     }
 

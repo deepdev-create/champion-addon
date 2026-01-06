@@ -514,17 +514,28 @@ class Champion_Dev_Test_Page {
             // Adjust total if override is given (exact testing: 49 / 50 / 51 etc.)
             if ( floatval( $order_total_override ) > 0 ) {
                 $order->calculate_totals();
-                $current_total = floatval( $order->get_total() );
-                $target_total  = floatval( $order_total_override );
-                $diff          = $target_total - $current_total;
-
-                if ( abs( $diff ) > 0.0001 ) {
-                    $fee = new WC_Order_Item_Fee();
-                    $fee->set_name( 'Dev Test Adjustment' );
-                    $fee->set_amount( $diff );
-                    $fee->set_total( $diff );
-                    $fee->set_tax_status( 'none' );
-                    $order->add_item( $fee );
+                $target_total = floatval( $order_total_override );
+                
+                // Get the line items and adjust the first product's total to match target
+                $items = $order->get_items( 'line_item' );
+                if ( ! empty( $items ) ) {
+                    $first_item = reset( $items );
+                    // Set the item total to match target (this ensures order total = target)
+                    $first_item->set_total( $target_total );
+                    $first_item->set_subtotal( $target_total );
+                    $first_item->save();
+                } else {
+                    // Fallback: use fee adjustment if no items (shouldn't happen)
+                    $current_total = floatval( $order->get_total() );
+                    $diff = $target_total - $current_total;
+                    if ( abs( $diff ) > 0.0001 && $diff > 0 ) {
+                        $fee = new WC_Order_Item_Fee();
+                        $fee->set_name( 'Dev Test Adjustment' );
+                        $fee->set_amount( $diff );
+                        $fee->set_total( $diff );
+                        $fee->set_tax_status( 'none' );
+                        $order->add_item( $fee );
+                    }
                 }
             }
 

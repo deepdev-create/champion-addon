@@ -31,6 +31,7 @@ require_once CHAMPION_ADDON_PATH . 'includes/dashboard/customer-dashboard.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-milestones.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-orders-milestones.php';
 require_once CHAMPION_ADDON_PATH . 'includes/customer-test-page.php';
+require_once CHAMPION_ADDON_PATH . 'includes/user-flow.php';
 
 
 

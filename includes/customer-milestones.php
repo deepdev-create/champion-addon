@@ -414,7 +414,7 @@ class Champion_Customer_Milestones {
             return; // Not enough available qualified children yet
         }
 
-        // Get next block index
+        // Get current highest block index
         $last_block_index = intval( $this->wpdb->get_var( $this->wpdb->prepare(
             "SELECT MAX(block_index) FROM {$this->wpdb->prefix}champion_milestones WHERE parent_affiliate_id = %d",
             $parent_id
@@ -422,56 +422,68 @@ class Champion_Customer_Milestones {
 
         $next_block_index = $last_block_index + 1;
 
-        // Create milestone
-        $milestone_id = $this->wpdb->insert(
-            $this->wpdb->prefix . 'champion_milestones',
-            array(
-                'parent_affiliate_id' => $parent_id,
-                'amount' => $bonus,
-                'block_index' => $next_block_index,
-                'milestone_children' => $qualified_children_required,
-                'awarded_at' => current_time('mysql'),
-                'note' => 'auto-awarded 10x10x5',
-            ),
-            array( '%d', '%f', '%d', '%d', '%s', '%s' )
-        );
-
-        if ( ! $milestone_id ) {
-            Champion_Helpers::log('Failed to insert milestone for parent ' . $parent_id);
-            return;
-        }
-
-        // Mark 10 qualified children as used for this milestone
-        $qualified_children = $this->wpdb->get_col( $this->wpdb->prepare(
-            "SELECT DISTINCT child_ambassador_id FROM {$this->qualified_children_table}
-             WHERE parent_ambassador_id = %d
-             AND child_ambassador_id NOT IN (
-                SELECT DISTINCT child_ambassador_id FROM {$this->child_milestone_used_table}
-                WHERE parent_ambassador_id = %d
-             )
-             LIMIT %d",
-            $parent_id, $parent_id, $qualified_children_required
+        // Check if a milestone with this block_index already exists (prevent duplicates)
+        $existing = $this->wpdb->get_var( $this->wpdb->prepare(
+            "SELECT id FROM {$this->wpdb->prefix}champion_milestones WHERE parent_affiliate_id = %d AND block_index = %d",
+            $parent_id, $next_block_index
         ));
 
-        foreach ( $qualified_children as $child_id ) {
-            $this->wpdb->insert(
-                $this->child_milestone_used_table,
-                array(
-                    'child_ambassador_id' => $child_id,
-                    'parent_ambassador_id' => $parent_id,
-                    'milestone_id' => $milestone_id,
-                    'used_at' => current_time('mysql'),
-                ),
-                array( '%d', '%d', '%d', '%s' )
-            );
+        if ( $existing ) {
+            return; // Milestone already exists for this block
         }
 
-        // Award milestone
-        if ( get_transient( 'champion_suppress_awards' ) ) {
-            // No-op: test mode
-        } else {
-            do_action( 'champion_award_milestone', $parent_id, $bonus, $next_block_index );
-        }
+            // Create milestone
+            $inserted = $this->wpdb->insert(
+                $this->wpdb->prefix . 'champion_milestones',
+                array(
+                    'parent_affiliate_id' => $parent_id,
+                    'amount' => $bonus,
+                    'block_index' => $next_block_index,
+                    'milestone_children' => $qualified_children_required,
+                    'awarded_at' => current_time('mysql'),
+                    'note' => 'auto-awarded 10x10x5',
+                ),
+                array( '%d', '%f', '%d', '%d', '%s', '%s' )
+            );
+
+            if ( ! $inserted ) {
+                Champion_Helpers::log('Failed to insert milestone for parent ' . $parent_id);
+                return; // Failed to insert milestone
+            }
+
+            $milestone_id = $this->wpdb->insert_id;
+
+            // Mark 10 qualified children as used for this milestone
+            $qualified_children = $this->wpdb->get_col( $this->wpdb->prepare(
+                "SELECT DISTINCT child_ambassador_id FROM {$this->qualified_children_table}
+                 WHERE parent_ambassador_id = %d
+                 AND child_ambassador_id NOT IN (
+                    SELECT DISTINCT child_ambassador_id FROM {$this->child_milestone_used_table}
+                    WHERE parent_ambassador_id = %d
+                 )
+                 LIMIT %d",
+                $parent_id, $parent_id, $qualified_children_required
+            ));
+
+            foreach ( $qualified_children as $child_id ) {
+                $this->wpdb->insert(
+                    $this->child_milestone_used_table,
+                    array(
+                        'child_ambassador_id' => $child_id,
+                        'parent_ambassador_id' => $parent_id,
+                        'milestone_id' => $milestone_id,
+                        'used_at' => current_time('mysql'),
+                    ),
+                    array( '%d', '%d', '%d', '%s' )
+                );
+            }
+
+            // Award milestone
+            if ( get_transient( 'champion_suppress_awards' ) ) {
+                // No-op: test mode
+            } else {
+                do_action( 'champion_award_milestone', $parent_id, $bonus, $next_block_index );
+            }
     }
 
     /**
@@ -553,9 +565,11 @@ class Champion_Customer_Milestones {
     }
 
     public function count_qualifying_customers_for_child( $child_id, $parent_id ) {
+        $opts = Champion_Helpers::instance()->get_opts();
+        $customer_orders_required = intval( $opts['child_orders_required'] );
         return intval( $this->wpdb->get_var( $this->wpdb->prepare(
             "SELECT COUNT(*) FROM {$this->customer_orders_table} WHERE child_ambassador_id = %d AND parent_ambassador_id = %d AND qualifying_orders >= %d",
-            $child_id, $parent_id, 5
+            $child_id, $parent_id, $customer_orders_required
         )));
     }
 
