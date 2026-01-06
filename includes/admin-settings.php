@@ -416,8 +416,8 @@ class Champion_Admin {
                 <div class="champion-submit-area">
                     <?php submit_button(); ?>
                 </div>
-
-
+            </form>
+            
             <h2>Milestones (recent)</h2>
             <?php
             if ( ! empty($milestones) ) {
