@@ -63,7 +63,97 @@ function champion_clear_dashboard_cache( $user_id ) {
 }
 
 
+ /*07-01-2026 START*/
+function champion_get_ambassador_commission_totals_of_customers( $ambassador_id ) {
+    global $wpdb;
 
+    $ambassador_id = (int) $ambassador_id;
+    if ( $ambassador_id <= 0 ) {
+        return [
+            'lifetime' => 0,
+            'this_month' => 0,
+            'paid' => 0,
+        ];
+    }
+
+    $posts = $wpdb->posts;
+    $postmeta = $wpdb->postmeta;
+    $month_start = strtotime( date('Y-m-01 00:00:00') );
+
+    // Get all orders where champion_ambassador_id = $ambassador_id
+    // INNER JOIN ensures only posts with the meta key exist
+    $query = $wpdb->prepare(
+        "SELECT p.ID, pm_amb.meta_value as ambassador_id, pm_comm.meta_value as commission, p.post_date
+         FROM {$posts} p
+         INNER JOIN {$postmeta} pm_amb ON (p.ID = pm_amb.post_id AND pm_amb.meta_key = 'champion_ambassador_id')
+         LEFT JOIN {$postmeta} pm_comm ON (p.ID = pm_comm.post_id AND pm_comm.meta_key = 'champion_commission_amount')
+         WHERE p.post_type = 'shop_order'
+         AND p.post_status IN ('wc-processing', 'wc-completed', 'wc-refunded')
+         AND pm_amb.meta_value = %d",
+        $ambassador_id
+    );
+
+    $results = $wpdb->get_results( $query );
+
+    $lifetime = 0;
+    $this_month = 0;
+
+    if ( ! empty( $results ) ) {
+        foreach ( $results as $row ) {
+            $commission = (float) $row->commission;
+            if ( $commission <= 0 ) {
+                continue;
+            }
+
+            $lifetime += $commission;
+
+            // Check if order is this month
+            $order_timestamp = strtotime( $row->post_date );
+            if ( $order_timestamp >= $month_start ) {
+                $this_month += $commission;
+            }
+        }
+    }
+
+    /**
+     * Paid amount (bonus payouts)
+     * Use milestone payout history (paid=1) instead of a user meta that is not maintained reliably.
+     */
+    $paid = (float) champion_get_ambassador_paid_total_from_customers_orders( $ambassador_id );
+    
+    return [
+        'lifetime'   => round( $lifetime, 2 ),
+        'this_month' => round( $this_month, 2 ),
+        'paid'       => round( $paid, 2 ),
+    ];
+}
+
+function champion_get_ambassador_paid_total_from_customers_orders( $parent_id ) {
+    global $wpdb;
+
+    $ambassador_id = $parent_id;
+
+    $total_commission = $wpdb->get_var( $wpdb->prepare("
+        SELECT SUM(pm_amount.meta_value)
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} pm_user
+            ON p.ID = pm_user.post_id
+            AND pm_user.meta_key = 'champion_ambassador_id'
+            AND pm_user.meta_value = %d
+        INNER JOIN {$wpdb->postmeta} pm_paid
+            ON p.ID = pm_paid.post_id
+            AND pm_paid.meta_key = 'champion_commission_paid'
+            AND pm_paid.meta_value = '1'
+        INNER JOIN {$wpdb->postmeta} pm_amount
+            ON p.ID = pm_amount.post_id
+            AND pm_amount.meta_key = 'champion_commission_amount'
+        WHERE p.post_type = 'shop_order'
+        AND p.post_status IN ('wc-processing','wc-completed')
+    ", $ambassador_id ) );
+
+    return round( (float) $total_commission, 2 );
+}
+/*07-01-2026 END*/
 
 function champion_get_ambassador_commission_totals( $ambassador_id ) {
     global $wpdb;
@@ -783,6 +873,9 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         // QR code (simple external generator)
         $qr_code_src  = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' . $share_url;
 
+        /*----- 07-01-2026 START -----*/
+        $customers_commission_totals = champion_get_ambassador_commission_totals_of_customers( $user_id );
+        /*----- 07-01-2026 END -----*/
 
         /*
         $customer_commission_orders = wc_get_orders( array(
@@ -1005,7 +1098,8 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
             <!-- Bonus Summary (Milestones Tab) -->
             <div class="champion-card">
-                <div class="champion-card-header">
+
+                <!-- <div class="champion-card-header">
                     <div class="champion-card-title"><?php echo esc_html__('Bonus Summary', 'champion-addon'); ?></div>
                 </div>
 
@@ -1016,7 +1110,7 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                             <?php echo wp_kses_post(wc_price($total_bonus)); ?>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
                 <div style="margin-top:18px;">
                 <?php
@@ -1172,6 +1266,8 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         <!-- Commissions Tab Content -->
         <div class="champion-tab-content" id="champion-tab-commissions" data-tab="commissions" style="display: none;">
             <!-- Commission Summary -->
+
+            <?php /*
             <div class="champion-card">
                 <div class="champion-card-header">
                     <div class="champion-card-title"><?php echo esc_html__('Commission Summary', 'champion-addon'); ?></div>
@@ -1198,6 +1294,8 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                     </div>
                 </div>
             </div>
+
+            */ ?>
 
             <!-- Referred Customers List -->
     <div class="champion-card">
@@ -1337,14 +1435,24 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
           <div class="champion-metric">
             <div class="champion-metric-label">Total Commission</div>
             <div class="champion-metric-value">
-              <?php echo wc_price( $customer_commission_totals['lifetime'] ); ?>
+              <?php // echo wc_price( $customer_commission_totals['lifetime'] ); ?>
+              <?php echo wp_kses_post(wc_price($customers_commission_totals['lifetime'])); ?>
             </div>
           </div>
 
           <div class="champion-metric">
             <div class="champion-metric-label">This Month</div>
             <div class="champion-metric-value">
-              <?php echo wc_price( $customer_commission_totals['this_month'] ); ?>
+              <?php // echo wc_price( $customer_commission_totals['this_month'] ); ?>
+              <?php echo wp_kses_post(wc_price($customers_commission_totals['this_month'])); ?>
+            </div>
+          </div>
+          <div class="champion-metric">
+            <div class="champion-metric-label"><?php echo esc_html__('Commission Paid Out', 'champion-addon'); ?></div>
+            <div class="champion-metric-value" style="color: #28a745;">
+
+              <?php // echo wc_price( $customer_commission_totals['this_month'] ); ?>
+              <?php echo wp_kses_post(wc_price($customers_commission_totals['paid'])); ?>
             </div>
           </div>
         </div>
