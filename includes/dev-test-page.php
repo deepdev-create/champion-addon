@@ -92,6 +92,10 @@ class Champion_Dev_Test_Page {
                         intval( $result['orders_deleted'] ),
                         intval( $result['users_deleted'] )
                     );
+                    
+                    if ( ! empty( $result['warnings'] ) ) {
+                        $message .= ' Warnings: ' . implode( ', ', $result['warnings'] );
+                    }
                 }
             }
 
@@ -746,61 +750,203 @@ class Champion_Dev_Test_Page {
             return array( 'error' => 'WooCommerce functions not available.' );
         }
 
+        // Increase execution time for bulk operations
+        @set_time_limit( 300 ); // 5 minutes max
+        @ini_set( 'max_execution_time', 300 );
+
         global $wpdb;
 
         $orders_deleted = 0;
         $users_deleted  = 0;
+        $errors = array();
 
-        // 1) Delete tracked orders
+        // 1) Delete tracked orders (bulk delete for performance)
         $order_ids = get_option( self::OPT_CREATED_ORDERS, array() );
-        if ( is_array( $order_ids ) ) {
-            foreach ( $order_ids as $oid ) {
-                $oid = intval( $oid );
-                if ( $oid <= 0 ) continue;
-
-                // Hard delete order post + items
-                wp_delete_post( $oid, true );
-                $orders_deleted++;
+        if ( is_array( $order_ids ) && ! empty( $order_ids ) ) {
+            // Sanitize IDs
+            $order_ids = array_map( 'intval', $order_ids );
+            $order_ids = array_filter( $order_ids, function( $id ) { return $id > 0; } );
+            
+            if ( ! empty( $order_ids ) ) {
+                // Use bulk SQL delete for better performance
+                $ids_placeholders = implode( ',', array_fill( 0, count( $order_ids ), '%d' ) );
+                
+                // Delete order items first
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}woocommerce_order_items WHERE order_id IN ($ids_placeholders)",
+                    ...$order_ids
+                ) );
+                
+                // Delete order item meta
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE om FROM {$wpdb->prefix}woocommerce_order_itemmeta om
+                     INNER JOIN {$wpdb->prefix}woocommerce_order_items oi ON om.order_item_id = oi.order_item_id
+                     WHERE oi.order_id IN ($ids_placeholders)",
+                    ...$order_ids
+                ) );
+                
+                // Delete order meta
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}postmeta WHERE post_id IN ($ids_placeholders)",
+                    ...$order_ids
+                ) );
+                
+                // Delete order posts
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}posts WHERE ID IN ($ids_placeholders)",
+                    ...$order_ids
+                ) );
+                
+                $orders_deleted = count( $order_ids );
             }
         }
         update_option( self::OPT_CREATED_ORDERS, array(), false );
 
-        // 2) Delete tracked users
+        // 2) Delete tracked users (still use wp_delete_user for safety and proper cleanup)
         $user_ids = get_option( self::OPT_CREATED_USERS, array() );
-        if ( is_array( $user_ids ) ) {
+        $processed_user_ids = array();
+        
+        if ( is_array( $user_ids ) && ! empty( $user_ids ) ) {
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+            
             foreach ( $user_ids as $uid ) {
                 $uid = intval( $uid );
                 if ( $uid <= 0 ) continue;
 
                 // Only delete if it matches our pattern (extra safety)
                 $u = get_user_by( 'id', $uid );
-                if ( $u && strpos( $u->user_email, '@example.com' ) !== false && strpos( $u->user_login, 'champ_child_' ) === 0 ) {
-                    require_once ABSPATH . 'wp-admin/includes/user.php';
-                    wp_delete_user( $uid );
-                    $users_deleted++;
+                if ( $u && strpos( $u->user_email, '@example.com' ) !== false && 
+                     ( strpos( $u->user_login, 'champ_child_' ) === 0 || strpos( $u->user_login, 'champ_cust_' ) === 0 ) ) {
+                    $deleted = wp_delete_user( $uid );
+                    if ( $deleted ) {
+                        $users_deleted++;
+                        $processed_user_ids[] = $uid;
+                    }
                 }
             }
         }
+        
+        // Fallback: If no tracked users found, search by pattern
+        if ( $users_deleted === 0 ) {
+            require_once ABSPATH . 'wp-admin/includes/user.php';
+            
+            // Find test users by pattern
+            $test_users = $wpdb->get_results( $wpdb->prepare(
+                "SELECT ID FROM {$wpdb->prefix}users 
+                 WHERE user_email LIKE %s 
+                 AND (user_login LIKE %s OR user_login LIKE %s)
+                 LIMIT 500",
+                '%@example.com',
+                'champ_child_%',
+                'champ_cust_%'
+            ) );
+            
+            if ( ! empty( $test_users ) ) {
+                foreach ( $test_users as $test_user ) {
+                    $uid = intval( $test_user->ID );
+                    if ( in_array( $uid, $processed_user_ids, true ) ) continue;
+                    
+                    $u = get_user_by( 'id', $uid );
+                    if ( $u && strpos( $u->user_email, '@example.com' ) !== false && 
+                         ( strpos( $u->user_login, 'champ_child_' ) === 0 || strpos( $u->user_login, 'champ_cust_' ) === 0 ) ) {
+                        $deleted = wp_delete_user( $uid );
+                        if ( $deleted ) {
+                            $users_deleted++;
+                            $processed_user_ids[] = $uid;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also delete orders for test users if we found any
+        if ( ! empty( $processed_user_ids ) && $orders_deleted === 0 ) {
+            $user_ids_placeholders = implode( ',', array_fill( 0, count( $processed_user_ids ), '%d' ) );
+            
+            // Find orders for these test users
+            $test_order_ids = $wpdb->get_col( $wpdb->prepare(
+                "SELECT p.ID FROM {$wpdb->prefix}posts p
+                 INNER JOIN {$wpdb->prefix}postmeta pm ON p.ID = pm.post_id
+                 WHERE p.post_type = 'shop_order'
+                 AND pm.meta_key = '_customer_user'
+                 AND pm.meta_value IN ($user_ids_placeholders)
+                 LIMIT 1000",
+                ...$processed_user_ids
+            ) );
+            
+            if ( ! empty( $test_order_ids ) ) {
+                $test_order_ids = array_map( 'intval', $test_order_ids );
+                $ids_placeholders = implode( ',', array_fill( 0, count( $test_order_ids ), '%d' ) );
+                
+                // Delete order items
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}woocommerce_order_items WHERE order_id IN ($ids_placeholders)",
+                    ...$test_order_ids
+                ) );
+                
+                // Delete order item meta
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE om FROM {$wpdb->prefix}woocommerce_order_itemmeta om
+                     INNER JOIN {$wpdb->prefix}woocommerce_order_items oi ON om.order_item_id = oi.order_item_id
+                     WHERE oi.order_id IN ($ids_placeholders)",
+                    ...$test_order_ids
+                ) );
+                
+                // Delete order meta
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}postmeta WHERE post_id IN ($ids_placeholders)",
+                    ...$test_order_ids
+                ) );
+                
+                // Delete order posts
+                $wpdb->query( $wpdb->prepare(
+                    "DELETE FROM {$wpdb->prefix}posts WHERE ID IN ($ids_placeholders)",
+                    ...$test_order_ids
+                ) );
+                
+                $orders_deleted += count( $test_order_ids );
+            }
+        }
+        
         update_option( self::OPT_CREATED_USERS, array(), false );
 
         // 3) Clear counters/milestones tables (dev only)
-        $child_table              = $wpdb->prefix . 'champion_child_counters';
-        $milestones_table         = $wpdb->prefix . 'champion_milestones';
-        $customer_orders_table    = $wpdb->prefix . 'champion_customer_orders';
-        $qualified_children_table = $wpdb->prefix . 'champion_qualified_children';
-        $child_milestone_used_table = $wpdb->prefix . 'champion_child_milestone_used';
+        $tables = array(
+            $wpdb->prefix . 'champion_child_counters',
+            $wpdb->prefix . 'champion_milestones',
+            $wpdb->prefix . 'champion_customer_orders',
+            $wpdb->prefix . 'champion_qualified_children',
+            $wpdb->prefix . 'champion_child_milestone_used',
+            $wpdb->prefix . 'champion_child_customer_counters',
+            $wpdb->prefix . 'champion_customer_milestones',
+        );
 
-        // Tables may not exist on very fresh installs; ignore errors.
-        $wpdb->query( "TRUNCATE TABLE {$child_table}" );
-        $wpdb->query( "TRUNCATE TABLE {$milestones_table}" );
-        $wpdb->query( "TRUNCATE TABLE {$customer_orders_table}" );
-        $wpdb->query( "TRUNCATE TABLE {$qualified_children_table}" );
-        $wpdb->query( "TRUNCATE TABLE {$child_milestone_used_table}" );
+        foreach ( $tables as $table ) {
+            // Check if table exists before truncating
+            $table_exists = $wpdb->get_var( $wpdb->prepare(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s AND table_name = %s",
+                DB_NAME,
+                $table
+            ) );
+            
+            if ( $table_exists ) {
+                $result = $wpdb->query( "TRUNCATE TABLE {$table}" );
+                if ( $result === false ) {
+                    $errors[] = "Failed to truncate table: {$table}";
+                }
+            }
+        }
 
-        return array(
+        $result = array(
             'orders_deleted' => $orders_deleted,
             'users_deleted'  => $users_deleted,
         );
+        
+        if ( ! empty( $errors ) ) {
+            $result['warnings'] = $errors;
+        }
+
+        return $result;
     }
 
     protected static function get_users_for_dropdown() {
