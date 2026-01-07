@@ -235,13 +235,9 @@ class Champion_Milestones {
 
             
 
-            // If dev test is generating orders, suppress immediate payout/award.
-            // Milestone rows remain unpaid; monthly payout/manual payout can handle later.
-            if ( get_transient( 'champion_suppress_awards' ) ) {
-                // No-op: do not award now.
-            } else {
-                do_action( 'champion_award_milestone', $parent_id, $bonus, $block_index );
-            }
+            // Don't award immediately - let monthly payout process handle it
+            // The milestone is created with awarded_at timestamp, monthly payout will process it
+            // Monthly payout (cron on 15th or manual trigger) will call do_action('champion_award_milestone')
 
         }
     }

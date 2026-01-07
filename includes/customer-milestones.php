@@ -478,12 +478,9 @@ class Champion_Customer_Milestones {
                 );
             }
 
-            // Award milestone
-            if ( get_transient( 'champion_suppress_awards' ) ) {
-                // No-op: test mode
-            } else {
-                do_action( 'champion_award_milestone', $parent_id, $bonus, $next_block_index );
-            }
+            // Don't award immediately - let monthly payout process handle it
+            // The milestone is created with awarded_at timestamp, monthly payout will process it
+            // Monthly payout (cron on 15th or manual trigger) will call do_action('champion_award_milestone')
     }
 
     /**
