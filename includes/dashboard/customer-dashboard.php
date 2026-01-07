@@ -104,6 +104,10 @@ if (!function_exists('champion_customer_get_referred_customers')) {
 
         $ambassadors = [];
 
+        // Get required orders from settings
+        $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : array();
+        $required_orders = ! empty( $opts['child_customer_required_order'] ) ? intval( $opts['child_customer_required_order'] ) : 5;
+
         if (!empty($referred_ids)) {
             foreach ($referred_ids as $amb_id) {
                 $user = get_user_by('id', $amb_id);
@@ -112,7 +116,7 @@ if (!function_exists('champion_customer_get_referred_customers')) {
                 }
 
                 $completed_orders = (int) get_user_meta($amb_id, 'champion_customer_completed_orders', true);
-                $qualified        = $completed_orders >= 5; // As per your $100 bonus rule
+                $qualified        = $completed_orders >= $required_orders;
 
                 $ambassadors[] = [
                     'id'               => $amb_id,

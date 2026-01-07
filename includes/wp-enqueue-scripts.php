@@ -22,4 +22,12 @@ add_action( 'wp_enqueue_scripts', function () {
         '1.0.0'
     );
 
+    wp_enqueue_script(
+        'champion-common-js',
+        CHAMPION_ADDON_URL . 'assets/js/champion-common.js',
+        array( 'jquery' ),
+        '1.0.0',
+        true
+    );
+
 }, 20 );

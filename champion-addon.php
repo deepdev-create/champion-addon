@@ -15,7 +15,7 @@ define( 'CHAMPION_ADDON_URL', plugin_dir_url( __FILE__ ) );
 
 // Debug flag for dashboard (0 = disabled, 1 = enabled)
 if ( ! defined( 'CHAMPION_DEBUG_DASHBOARD' ) ) {
-    define( 'CHAMPION_DEBUG_DASHBOARD', 0 );
+    define( 'CHAMPION_DEBUG_DASHBOARD', 1 );
 }
 
 
