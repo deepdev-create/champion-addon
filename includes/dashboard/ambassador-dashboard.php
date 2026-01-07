@@ -3,6 +3,65 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Dashboard Caching Helper Functions
+ */
+
+/**
+ * Get cached data or fetch fresh if cache expired or refresh requested
+ * 
+ * @param string $cache_key Cache key
+ * @param callable $callback Function to fetch fresh data
+ * @param int $user_id User ID for cache key
+ * @param int $expiration Cache expiration in seconds (default 5 minutes)
+ * @param bool $force_refresh Force refresh (skip cache)
+ * @return mixed Cached or fresh data
+ */
+function champion_get_cached_dashboard_data( $cache_key, $callback, $user_id, $expiration = 300, $force_refresh = false ) {
+    $full_key = 'champion_dash_' . $cache_key . '_' . $user_id;
+    
+    // Check if refresh requested
+    if ( $force_refresh || isset( $_GET['champion_refresh'] ) ) {
+        delete_transient( $full_key );
+    }
+    
+    // Try to get from cache
+    $cached = get_transient( $full_key );
+    if ( $cached !== false && ! $force_refresh ) {
+        return $cached;
+    }
+    
+    // Fetch fresh data
+    $data = call_user_func( $callback );
+    
+    // Cache it
+    set_transient( $full_key, $data, $expiration );
+    
+    return $data;
+}
+
+/**
+ * Clear all dashboard cache for a user
+ * 
+ * @param int $user_id User ID
+ */
+function champion_clear_dashboard_cache( $user_id ) {
+    global $wpdb;
+    $user_id = (int) $user_id;
+    
+    // Delete all transients for this user
+    $wpdb->query( $wpdb->prepare(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+        $wpdb->esc_like( '_transient_champion_dash_' ) . '%' . $wpdb->esc_like( '_' . $user_id ) . '%'
+    ));
+    
+    // Also delete timeout transients
+    $wpdb->query( $wpdb->prepare(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+        $wpdb->esc_like( '_transient_timeout_champion_dash_' ) . '%' . $wpdb->esc_like( '_' . $user_id ) . '%'
+    ));
+}
+
 
 
 
@@ -667,20 +726,49 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
           return '<p>' . esc_html__('You are not registered as an ambassador.', 'champion-addon') . '</p>';
         }
 
+        // Check if refresh requested
+        $force_refresh = isset( $_GET['champion_refresh'] ) && $_GET['champion_refresh'] === '1';
+        if ( $force_refresh ) {
+            champion_clear_dashboard_cache( $user_id );
+        }
 
-        $links          = champion_get_ambassador_referral_links($user_id);
-        $total_bonus    = champion_get_ambassador_total_bonus($user_id);
-        $ambassadors    = champion_get_referred_ambassadors($user_id);
-        $customers      = champion_get_referred_customers($user_id);
-        $customer_stats = champion_get_customer_orders_stats($user_id);
-        $commissions    = champion_get_ambassador_commissions($user_id, 200);
-        
+        // Get data with caching (5 minutes cache)
+        $links = champion_get_cached_dashboard_data( 'links', function() use ($user_id) {
+            return champion_get_ambassador_referral_links($user_id);
+        }, $user_id, 300, $force_refresh );
+
+        $total_bonus = champion_get_cached_dashboard_data( 'total_bonus', function() use ($user_id) {
+            return champion_get_ambassador_total_bonus($user_id);
+        }, $user_id, 300, $force_refresh );
+
+        $ambassadors = champion_get_cached_dashboard_data( 'ambassadors', function() use ($user_id) {
+            return champion_get_referred_ambassadors($user_id);
+        }, $user_id, 300, $force_refresh );
+
+        $customers = champion_get_cached_dashboard_data( 'customers', function() use ($user_id) {
+            return champion_get_referred_customers($user_id);
+        }, $user_id, 300, $force_refresh );
+
+        $customer_stats = champion_get_cached_dashboard_data( 'customer_stats', function() use ($user_id) {
+            return champion_get_customer_orders_stats($user_id);
+        }, $user_id, 300, $force_refresh );
+
+        $commissions = champion_get_cached_dashboard_data( 'commissions', function() use ($user_id) {
+            return champion_get_ambassador_commissions($user_id, 200);
+        }, $user_id, 300, $force_refresh );
+
         // NEW: Get 10x10x5 milestone progress
-        $bonus_progress = champion_get_parent_bonus_progress($user_id);
+        $bonus_progress = champion_get_cached_dashboard_data( 'bonus_progress', function() use ($user_id) {
+            return champion_get_parent_bonus_progress($user_id);
+        }, $user_id, 300, $force_refresh );
 
-        $commission_totals = champion_get_ambassador_commission_totals( $user_id );
+        $commission_totals = champion_get_cached_dashboard_data( 'commission_totals', function() use ($user_id) {
+            return champion_get_ambassador_commission_totals( $user_id );
+        }, $user_id, 300, $force_refresh );
 
-        $customer_commission_totals = champion_get_customer_commission_totals_stats( $user_id );
+        $customer_commission_totals = champion_get_cached_dashboard_data( 'customer_commission_totals', function() use ($user_id) {
+            return champion_get_customer_commission_totals_stats( $user_id );
+        }, $user_id, 300, $force_refresh );
 
         // Social share URLs
         $share_url   = urlencode($links['customer_ref_link']);
@@ -715,131 +803,78 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
             ),
         ) );*/
 
-        $orders = wc_get_orders( array(
-            'limit'  => 300, // keep reasonable; increase if needed
-            'status' => array('completed','wc-processing'),
-            'orderby'=> 'date',
-            'order'  => 'DESC',
-            'return' => 'objects',
-        ) );
+        $customer_commission_orders = champion_get_cached_dashboard_data( 'customer_commission_orders', function() use ($user_id) {
+            $orders = wc_get_orders( array(
+                'limit'  => 300,
+                'status' => array('completed','wc-processing'),
+                'orderby'=> 'date',
+                'order'  => 'DESC',
+                'return' => 'objects',
+            ) );
 
-        $uid = get_current_user_id();
-        $customer_commission_orders = array_filter($orders, function($order) use ($uid){
-            if ( ! $order instanceof WC_Order ) return false;
+            return array_filter($orders, function($order) use ($user_id){
+                if ( ! $order instanceof WC_Order ) return false;
+                $amb1 = (int) $order->get_meta('champion_ambassador_id', true);
+                $amb2 = (int) $order->get_meta('champion_customer_ref_ambassador_id', true);
+                $paid_exists = $order->get_meta('champion_commission_paid', true);
+                return ( ($amb1 === $user_id) || ($amb2 === $user_id) ) && ($paid_exists !== '' && $paid_exists !== null);
+            });
+        }, $user_id, 300, $force_refresh );
 
-            $amb1 = (int) $order->get_meta('champion_ambassador_id', true);
-            $amb2 = (int) $order->get_meta('champion_customer_ref_ambassador_id', true);
-            $paid_exists = $order->get_meta('champion_commission_paid', true);
-            // (ambassador match) AND paid meta exists
-            return ( ($amb1 === $uid) || ($amb2 === $uid) ) && ($paid_exists !== '' && $paid_exists !== null);
-        });
+        // Get payout history with caching
+        $payouts = champion_get_cached_dashboard_data( 'payouts', function() use ($user_id) {
+            return champion_get_milestone_payout_history( $user_id, 50 );
+        }, $user_id, 300, $force_refresh );
 
         ob_start();
         ?>
 
 <div class="champion-dashboard-wrapper">
-    <!-- Referral Links + QR + Share -->
-    <div class="champion-card">
-        <div class="champion-card-header">
-            <div>
-                <div class="champion-card-title"><?php echo esc_html__('Ambassador Dashboard', 'champion-addon'); ?></div>
-                <div class="champion-card-subtitle">
-                    <?php echo esc_html__('Share your links, track your referrals and bonuses in one place.', 'champion-addon'); ?>
-                </div>
-            </div>
-        </div>
-
-        <div class="champion-flex">
-            <div class="champion-col">
-                <div class="champion-copy-wrap">
-                    <div class="champion-copy-label"><?php echo esc_html__('Customer Referral Link', 'champion-addon'); ?></div>
-                    <div class="champion-copy-box">
-                        <span class="champion-copy-text"><?php echo esc_html($links['customer_ref_link']); ?></span>
-                        <button class="champion-copy-btn" type="button"
-                            data-copy="<?php echo esc_attr($links['customer_ref_link']); ?>">
-                            <?php echo esc_html__('Copy', 'champion-addon'); ?>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="champion-copy-wrap">
-                    <div class="champion-copy-label"><?php echo esc_html__('Ambassador Invite Link', 'champion-addon'); ?></div>
-                    <div class="champion-copy-box">
-                        <span class="champion-copy-text"><?php echo esc_html($links['ambassador_invite_link']); ?></span>
-                        <button class="champion-copy-btn" type="button"
-                            data-copy="<?php echo esc_attr($links['ambassador_invite_link']); ?>">
-                            <?php echo esc_html__('Copy', 'champion-addon'); ?>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Instructions Box -->
-                <div class="champion-info-box" style="margin-top: 20px; padding: 15px; background: #f0f7ff; border-left: 4px solid #0073aa; border-radius: 4px;">
-                    <h4 style="margin-top: 0; margin-bottom: 10px; color: #0073aa; font-size: 14px; font-weight: 600;">
-                        <?php echo esc_html__('📋 How to Use Your Links', 'champion-addon'); ?>
-                    </h4>
-                    <?php
-                    $opts = Champion_Helpers::instance()->get_opts();
-                    $parent_meta = ! empty( $opts['parent_usermeta'] ) ? $opts['parent_usermeta'] : 'champion_parent_ambassador';
-                    $is_child = (int) get_user_meta( $user_id, $parent_meta, true ) > 0;
-                    
-                    if ( $is_child ) {
-                        // Child Ambassador Instructions
-                        $opts_instructions = Champion_Helpers::instance()->get_opts();
-                        $customers_required = intval( $opts_instructions['block_size'] ) ?: 10;
-                        $orders_required = intval( $opts_instructions['child_orders_required'] ) ?: 5;
-                        ?>
-                        <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 13px; line-height: 1.6;">
-                            <li><strong>Ambassador Invite Link:</strong> <?php echo esc_html__('Share this to recruit other ambassadors who will become your child ambassadors (for milestone bonuses).', 'champion-addon'); ?></li>
-                            <li><strong>Customer Referral Link:</strong> <?php 
-                                printf(
-                                    esc_html__('Share this to recruit customers for the 10x10x5 milestone system. You need %d customers with %d orders each ($50+) to qualify. These customers will count toward your milestone qualification AND your parent ambassador will earn commission on their orders.', 'champion-addon'),
-                                    $customers_required,
-                                    $orders_required
-                                );
-                            ?></li>
-                        </ul>
-                        <p style="margin: 10px 0 0 0; padding: 10px; background: #fff; border-radius: 4px; font-size: 12px; color: #666;">
-                            <strong>💡 Tip:</strong> <?php echo esc_html__('Focus on sharing your Customer Referral Link to reach your milestone goal!', 'champion-addon'); ?>
-                        </p>
-                        <?php
-                    } else {
-                        // Parent Ambassador Instructions
-                        ?>
-                        <ul style="margin: 0; padding-left: 20px; color: #555; font-size: 13px; line-height: 1.6;">
-                            <li><strong>Ambassador Invite Link:</strong> <?php echo esc_html__('Share this to recruit child ambassadors. When they qualify (10 customers with 5 orders each), you earn milestone bonuses.', 'champion-addon'); ?></li>
-                            <li><strong>Customer Referral Link:</strong> <?php echo esc_html__('Share this to recruit customers directly. You will earn commission on their orders, but these customers won\'t count toward milestone bonuses (only customers referred by your child ambassadors count for milestones).', 'champion-addon'); ?></li>
-                        </ul>
-                        <?php
-                    }
-                    ?>
-                </div>
-
-                <?php /*
-                <div class="champion-share-list">
-                    <span class="champion-tag-muted"><?php echo esc_html__('Share quickly:', 'champion-addon'); ?></span>
-                    <a href="<?php echo esc_url($whatsapp_url); ?>" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-                    <a href="<?php echo esc_url($facebook_url); ?>" target="_blank" rel="noopener noreferrer">Facebook</a>
-                    <a href="<?php echo esc_url($twitter_url); ?>" target="_blank" rel="noopener noreferrer">X / Twitter</a>
-                    <a href="<?php echo esc_url($telegram_url); ?>" target="_blank" rel="noopener noreferrer">Telegram</a>
-                    <a href="<?php echo esc_url($email_url); ?>" target="_blank" rel="noopener noreferrer">Email</a>
-                </div>
-                */ ?>
-
-            </div>
-            
-            <?php /*
-            <div class="champion-col" style="max-width:260px;text-align:center;">
-                <div class="champion-copy-label"><?php echo esc_html__('QR Code (Customer Link)', 'champion-addon'); ?></div>
-                <img src="<?php echo esc_url($qr_code_src); ?>" alt="<?php esc_attr_e('Referral QR Code', 'champion-addon'); ?>" />
-            </div>
-            */ ?>
-
-
-        </div>
+    <!-- Refresh Button -->
+    <div style="text-align: right; margin-bottom: 15px;">
+        <a href="<?php echo esc_url( add_query_arg( 'champion_refresh', '1' ) ); ?>" 
+           class="button" 
+           style="text-decoration: none; display: inline-block;">
+            🔄 <?php echo esc_html__('Refresh Data', 'champion-addon'); ?>
+        </a>
     </div>
 
-    <!-- Overview Stats & Milestone Progress -->
+    <!-- Referral Links Section (Always Visible) -->
+    <?php
+    $partial_path = CHAMPION_ADDON_PATH . 'includes/dashboard/partials/ambassador-links.php';
+    if ( file_exists( $partial_path ) ) {
+        include $partial_path;
+    } else {
+        // Fallback if partial doesn't exist
+        ?>
+        <div class="champion-card">
+            <div class="champion-card-header">
+                <div>
+                    <div class="champion-card-title"><?php echo esc_html__('Ambassador Dashboard', 'champion-addon'); ?></div>
+                    <div class="champion-card-subtitle">
+                        <?php echo esc_html__('Share your links, track your referrals and bonuses in one place.', 'champion-addon'); ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    ?>
+
+    <!-- Tabs Navigation -->
+    <div class="champion-tabs" style="margin-top: 20px;">
+        <div class="champion-tab-nav" style="border-bottom: 2px solid #e0e0e0; margin-bottom: 20px;">
+            <button class="champion-tab-btn active" data-tab="milestones" style="padding: 12px 24px; background: none; border: none; border-bottom: 3px solid #0073aa; cursor: pointer; font-size: 16px; font-weight: 600; color: #0073aa;">
+                <?php echo esc_html__('Milestones', 'champion-addon'); ?>
+            </button>
+            <button class="champion-tab-btn" data-tab="commissions" style="padding: 12px 24px; background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; font-size: 16px; font-weight: 600; color: #666;">
+                <?php echo esc_html__('Commissions', 'champion-addon'); ?>
+            </button>
+        </div>
+
+        <!-- Milestones Tab Content -->
+        <div class="champion-tab-content active" id="champion-tab-milestones" data-tab="milestones">
+            <!-- Milestone Progress -->
     <div class="champion-card">
         <div class="champion-card-header">
             <div class="champion-card-title"><?php echo esc_html__('Milestone Progress', 'champion-addon'); ?></div>
@@ -968,43 +1003,23 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
         <?php endif; ?>
     </div>
 
-    <!-- Bonus Performance & Commission Summary -->
-    <div class="champion-card">
-        <div class="champion-card-header">
-            <div class="champion-card-title"><?php echo esc_html__('Earnings Summary', 'champion-addon'); ?></div>
-        </div>
+            <!-- Bonus Summary (Milestones Tab) -->
+            <div class="champion-card">
+                <div class="champion-card-header">
+                    <div class="champion-card-title"><?php echo esc_html__('Bonus Summary', 'champion-addon'); ?></div>
+                </div>
 
-        <div class="champion-stats-row">
-            <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('Total Bonuses Earned', 'champion-addon'); ?></div>
-                <div class="champion-stat-value">
-                    <?php echo wp_kses_post(wc_price($total_bonus)); ?>
+                <div class="champion-stats-row">
+                    <div class="champion-stat-box">
+                        <div class="champion-stat-label"><?php echo esc_html__('Total Bonuses Earned', 'champion-addon'); ?></div>
+                        <div class="champion-stat-value">
+                            <?php echo wp_kses_post(wc_price($total_bonus)); ?>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('Lifetime Commission', 'champion-addon'); ?></div>
-                <div class="champion-stat-value">
-                    <?php echo wp_kses_post(wc_price($commission_totals['lifetime'])); ?>
-                </div>
-            </div>
-            <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('This Month Commission', 'champion-addon'); ?></div>
-                <div class="champion-stat-value">
-                    <?php echo wp_kses_post(wc_price($commission_totals['this_month'])); ?>
-                </div>
-            </div>
-            <div class="champion-stat-box">
-                <div class="champion-stat-label"><?php echo esc_html__('Commission Paid Out', 'champion-addon'); ?></div>
-                <div class="champion-stat-value" style="color: #28a745;">
-                    <?php echo wp_kses_post(wc_price($commission_totals['paid'])); ?>
-                </div>
-            </div>
-        </div>
 
-            <div style="margin-top:18px;">
-            <?php 
-
-            $payouts = champion_get_milestone_payout_history( $user_id, 50 );
+                <div style="margin-top:18px;">
+                <?php
 
             echo '<h3>Bonus Payout History</h3>';
 
@@ -1090,9 +1105,6 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
 
                 echo '</tbody></table>';
             }
-
-
-
             ?>
         </div>
         </div>
@@ -1153,21 +1165,48 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 <?php echo esc_html__('No ambassadors referred yet. Share your invite link to start building your team.', 'champion-addon'); ?>
             </p>
         <?php endif; ?>
-    </div>
+        </div>
+        </div>
+        <!-- End Milestones Tab -->
 
-    <!-- Referred Customers List -->
+        <!-- Commissions Tab Content -->
+        <div class="champion-tab-content" id="champion-tab-commissions" data-tab="commissions" style="display: none;">
+            <!-- Commission Summary -->
+            <div class="champion-card">
+                <div class="champion-card-header">
+                    <div class="champion-card-title"><?php echo esc_html__('Commission Summary', 'champion-addon'); ?></div>
+                </div>
+
+                <div class="champion-stats-row">
+                    <div class="champion-stat-box">
+                        <div class="champion-stat-label"><?php echo esc_html__('Lifetime Commission', 'champion-addon'); ?></div>
+                        <div class="champion-stat-value">
+                            <?php echo wp_kses_post(wc_price($commission_totals['lifetime'])); ?>
+                        </div>
+                    </div>
+                    <div class="champion-stat-box">
+                        <div class="champion-stat-label"><?php echo esc_html__('This Month Commission', 'champion-addon'); ?></div>
+                        <div class="champion-stat-value">
+                            <?php echo wp_kses_post(wc_price($commission_totals['this_month'])); ?>
+                        </div>
+                    </div>
+                    <div class="champion-stat-box">
+                        <div class="champion-stat-label"><?php echo esc_html__('Commission Paid Out', 'champion-addon'); ?></div>
+                        <div class="champion-stat-value" style="color: #28a745;">
+                            <?php echo wp_kses_post(wc_price($commission_totals['paid'])); ?>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Referred Customers List -->
     <div class="champion-card">
         <div class="champion-card-header">
             <div class="champion-card-title"><?php echo esc_html__('Referred Customers', 'champion-addon'); ?></div>
             <div class="champion-card-subtitle">
                 <?php echo esc_html__('Customers attached to you via your referral link or coupon.', 'champion-addon'); ?>
             </div>
-            
-
         </div>
-
-       
-
         <?php if (!empty($customers)) : ?>
             <div style="overflow-x:auto;">
                 <table class="champion-table">
@@ -1308,19 +1347,8 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
               <?php echo wc_price( $customer_commission_totals['this_month'] ); ?>
             </div>
           </div>
-
-          <?php /*
-          <div class="champion-metric">
-            <div class="champion-metric-label">Paid Till Date</div>
-            <div class="champion-metric-value">
-              <?php //echo wc_price( 0 ); ?>
-            </div>
-          </div> */ ?>
-
-
         </div>
     </div>
-
     <!-- Order history + commissions -->
     <div class="champion-card">
         <div class="champion-card-header">
@@ -1378,11 +1406,50 @@ if (!function_exists('champion_render_ambassador_dashboard')) {
                 <?php echo esc_html__('No commissionable orders found yet.', 'champion-addon'); ?>
             </p>
         <?php endif; ?>
+        </div>
+        </div>
+        <!-- End Commissions Tab -->
     </div>
+    <!-- End Tabs -->
 
 </div>
+<!-- End Dashboard Wrapper -->
 
 <script>
+// Tab Switching
+document.addEventListener('DOMContentLoaded', function() {
+    var tabButtons = document.querySelectorAll('.champion-tab-btn');
+    var tabContents = document.querySelectorAll('.champion-tab-content');
+    
+    tabButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var targetTab = this.getAttribute('data-tab');
+            
+            // Update buttons
+            tabButtons.forEach(function(b) {
+                b.classList.remove('active');
+                b.style.borderBottomColor = 'transparent';
+                b.style.color = '#666';
+            });
+            this.classList.add('active');
+            this.style.borderBottomColor = '#0073aa';
+            this.style.color = '#0073aa';
+            
+            // Update content
+            tabContents.forEach(function(content) {
+                if (content.getAttribute('data-tab') === targetTab) {
+                    content.style.display = 'block';
+                    content.classList.add('active');
+                } else {
+                    content.style.display = 'none';
+                    content.classList.remove('active');
+                }
+            });
+        });
+    });
+});
+
+// Copy Button Functionality
 document.addEventListener('click', function (e) {
     if (e.target && e.target.classList.contains('champion-copy-btn')) {
         var text = e.target.getAttribute('data-copy');
@@ -1398,7 +1465,11 @@ document.addEventListener('click', function (e) {
 });
 </script>
 
-<!-- DEBUG: Meta Relations & Data Flow (Remove after debugging) -->
+<?php
+// DEBUG Section - Only show if constant is enabled
+if ( defined( 'CHAMPION_DEBUG_DASHBOARD' ) && CHAMPION_DEBUG_DASHBOARD === 1 ) :
+?>
+<!-- DEBUG: Meta Relations & Data Flow -->
 <hr style="margin-top:60px; border-top: 2px dashed #ccc;">
 <div style="background: #f0f0f0; padding: 20px; margin-top: 20px; border-left: 5px solid #cc0000; font-family: monospace; font-size: 11px; max-height: 600px; overflow-y: auto;">
     <h4 style="margin-top:0; color: #cc0000;">🔍 DEBUG: Parent-Child Relationship Chain</h4>
@@ -1522,6 +1593,9 @@ document.addEventListener('click', function (e) {
     echo "bonus_amount: \$" . floatval( $opts['bonus_amount'] ) . "<br>";
     ?>
 </div>
+<?php
+endif; // End DEBUG section
+?>
 
 <?php
         return ob_get_clean();
@@ -1530,14 +1604,6 @@ document.addEventListener('click', function (e) {
 
 // Shortcode registration is still:
  add_shortcode('champion_ambassador_dashboard', 'champion_render_ambassador_dashboard');
-
-
-
-// Add menu item
-/*add_filter('woocommerce_account_menu_items', function($items) {
-    $items['champion-dashboard'] = 'Ambassador Dashboard';
-    return $items;
-});*/
 
 add_filter( 'woocommerce_account_menu_items', function( $items ) {
 

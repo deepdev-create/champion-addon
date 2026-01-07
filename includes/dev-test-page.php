@@ -19,6 +19,11 @@ class Champion_Dev_Test_Page {
     }
 
     public static function register_page() {
+        // Only show if DEBUG constant is enabled
+        if ( ! defined( 'CHAMPION_DEBUG_DASHBOARD' ) || CHAMPION_DEBUG_DASHBOARD !== 1 ) {
+            return;
+        }
+
         $cap = apply_filters( 'champion_dev_test_capability', 'manage_woocommerce' );
 
         add_submenu_page(
@@ -138,9 +143,172 @@ class Champion_Dev_Test_Page {
 
 
         ?>
-        <div class="wrap">
-            <h1>Champion Dev Test Tools</h1>
-            <p><strong>WARNING:</strong> Developer/staging only. This will create real users and real orders.</p>
+        <style>
+            .champion-dev-test-wrapper {
+                max-width: 1200px;
+                margin: 20px 0;
+            }
+
+            .champion-section {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                margin-bottom: 25px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .champion-section-header {
+                padding: 18px 20px;
+                font-size: 16px;
+                font-weight: 600;
+                border-bottom: 3px solid;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+
+            .champion-section.dev-test .champion-section-header {
+                background: #fff3cd;
+                border-bottom-color: #ffc107;
+                color: #856404;
+            }
+
+            .champion-section-header-icon {
+                font-size: 20px;
+                line-height: 1;
+            }
+
+            .champion-section-content {
+                padding: 20px;
+            }
+
+            .champion-settings-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .champion-settings-table tr {
+                border-bottom: 1px solid #f0f0f0;
+            }
+
+            .champion-settings-table tr:last-child {
+                border-bottom: none;
+            }
+
+            .champion-settings-table th {
+                text-align: left;
+                width: 280px;
+                padding: 16px 15px;
+                font-weight: 600;
+                font-size: 14px;
+                color: #333;
+            }
+
+            .champion-settings-table td {
+                padding: 16px 15px;
+            }
+
+            .champion-settings-table input[type="text"],
+            .champion-settings-table input[type="number"],
+            .champion-settings-table select {
+                min-width: 250px;
+                padding: 8px 10px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+
+            .champion-settings-table input[type="checkbox"] {
+                width: 20px;
+                height: 20px;
+                cursor: pointer;
+            }
+
+            .description {
+                display: block;
+                color: #666;
+                font-size: 13px;
+                margin-top: 6px;
+                line-height: 1.5;
+            }
+
+            .champion-warning-box {
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 15px 20px;
+                margin-bottom: 25px;
+                border-radius: 4px;
+            }
+
+            .champion-warning-box strong {
+                color: #856404;
+            }
+
+            .champion-submit-area {
+                margin-top: 30px;
+                padding: 20px;
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .champion-submit-area .button-primary {
+                background-color: #0073aa;
+                border-color: #005a87;
+                font-size: 15px;
+                padding: 8px 20px;
+                margin-right: 10px;
+            }
+
+            .champion-submit-area .button-primary:hover {
+                background-color: #005a87;
+            }
+
+            .champion-submit-area .button {
+                margin-right: 10px;
+            }
+
+            .champion-info-box {
+                background: #f0f7ff;
+                border-left: 4px solid #0073aa;
+                padding: 15px 20px;
+                margin-top: 20px;
+                border-radius: 4px;
+            }
+
+            .champion-info-box h3 {
+                margin-top: 0;
+                margin-bottom: 10px;
+                color: #0073aa;
+                font-size: 16px;
+            }
+
+            .champion-info-box ol {
+                margin: 10px 0;
+                padding-left: 25px;
+            }
+
+            .champion-info-box li {
+                margin-bottom: 8px;
+                line-height: 1.6;
+            }
+
+            .champion-info-box code {
+                background: #fff;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 12px;
+            }
+        </style>
+
+        <div class="wrap champion-dev-test-wrapper">
+            <h1>🧪 Champion Dev Test Tools</h1>
+
+            <div class="champion-warning-box">
+                <strong>⚠️ WARNING:</strong> Developer/staging only. This will create real users and real orders. Use with caution!
+            </div>
 
             <?php if ( ! empty( $error ) ) : ?>
                 <div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div>
@@ -151,94 +319,103 @@ class Champion_Dev_Test_Page {
             <form method="post">
                 <?php wp_nonce_field( 'champion_dev_test_action', 'champion_dev_test_nonce' ); ?>
 
-                <table class="form-table" role="presentation">
-                    <tbody>
+                <div class="champion-section dev-test">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">⚙️</span>
+                        <span>Test Data Generation</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Create test child ambassadors, customers, and orders for the 10x10x5 milestone system</p>
+                        <table class="champion-settings-table">
+                            <tbody>
 
-                    <tr>
-                        <th scope="row"><label for="champion_parent_id">Parent Ambassador</label></th>
-                        <td>
-                            <select name="champion_parent_id" id="champion_parent_id">
-                                <option value="0">— Select User (Ambassadors marked) —</option>
-                                <?php
-                                foreach ( $users as $user ) {
-                                    $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
-                                    $label  = $user->display_name;
-                                    if ( $is_amb ) $label .= ' [AMB]';
+                            <tr>
+                                <th><label for="champion_parent_id">Parent Ambassador</label></th>
+                                <td>
+                                    <select name="champion_parent_id" id="champion_parent_id" style="min-width: 250px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                                        <option value="0">— Select User (Ambassadors marked) —</option>
+                                        <?php
+                                        foreach ( $users as $user ) {
+                                            $is_amb = apply_filters( 'champion_is_user_ambassador', false, $user->ID );
+                                            $label  = $user->display_name;
+                                            if ( $is_amb ) $label .= ' [AMB]';
 
-                                    printf(
-                                        '<option value="%d">%s (ID: %d)</option>',
-                                        intval( $user->ID ),
-                                        esc_html( $label ),
-                                        intval( $user->ID )
-                                    );
-                                }
-                                ?>
-                            </select>
-                            <p class="description">[AMB] means your addon currently detects this user as an ambassador.</p>
-                        </td>
-                    </tr>
+                                            printf(
+                                                '<option value="%d">%s (ID: %d)</option>',
+                                                intval( $user->ID ),
+                                                esc_html( $label ),
+                                                intval( $user->ID )
+                                            );
+                                        }
+                                        ?>
+                                    </select>
+                                    <p class="description">[AMB] means your addon currently detects this user as an ambassador.</p>
+                                </td>
+                            </tr>
 
-                    <tr>
-                        <th scope="row"><label for="champion_mark_parent_amb">Mark parent as ambassador if missing</label></th>
-                        <td>
-                            <label>
-                                <input type="checkbox" name="champion_mark_parent_amb" id="champion_mark_parent_amb" value="1" />
-                                Force parent to be ambassador (role + meta "<?php echo esc_html( $amb_meta_key ); ?>") before generating data.
-                            </label>
-                        </td>
-                    </tr>
+                            <tr>
+                                <th><label for="champion_mark_parent_amb">Mark parent as ambassador if missing</label></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="champion_mark_parent_amb" id="champion_mark_parent_amb" value="1" />
+                                        Force parent to be ambassador (role + meta "<?php echo esc_html( $amb_meta_key ); ?>") before generating data.
+                                    </label>
+                                </td>
+                            </tr>
 
-                    <tr>
-                        <th scope="row"><label for="champion_child_count">Number of child ambassadors</label></th>
-                        <td>
-                            <input type="number" name="champion_child_count" id="champion_child_count" min="1" max="200" value="<?php echo esc_attr( $default_child_count ); ?>" />
-                            <p class="description">Default pulled from Champion settings (block_size = <?php echo esc_html( $default_child_count ); ?>).</p>
-                        </td>
-                    </tr>
+                            <tr>
+                                <th><label for="champion_child_count">Number of child ambassadors</label></th>
+                                <td>
+                                    <input type="number" name="champion_child_count" id="champion_child_count" min="1" max="200" value="<?php echo esc_attr( $default_child_count ); ?>" />
+                                    <p class="description">Default pulled from Champion settings (block_size = <?php echo esc_html( $default_child_count ); ?>).</p>
+                                </td>
+                            </tr>
 
-                    <tr>
-                        <th scope="row"><label for="champion_orders_per_child">Orders per child</label></th>
-                        <td>
-                            <input type="number" name="champion_orders_per_child" id="champion_orders_per_child" min="1" max="200" value="<?php echo esc_attr( $default_orders_per_child ); ?>" />
-                            <p class="description">Default pulled from Champion settings (child_orders_required = <?php echo esc_html( $default_orders_per_child ); ?>).</p>
-                        </td>
-                    </tr>
+                            <tr>
+                                <th><label for="champion_orders_per_child">Orders per child</label></th>
+                                <td>
+                                    <input type="number" name="champion_orders_per_child" id="champion_orders_per_child" min="1" max="200" value="<?php echo esc_attr( $default_orders_per_child ); ?>" />
+                                    <p class="description">Default pulled from Champion settings (child_orders_required = <?php echo esc_html( $default_orders_per_child ); ?>).</p>
+                                </td>
+                            </tr>
 
-                    <tr>
-                        <th scope="row"><label for="champion_order_total_override">Order total override (optional)</label></th>
-                        <td>
-                            <input type="number" step="0.01" min="0" name="champion_order_total_override" id="champion_order_total_override" value="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '' ); ?>" placeholder="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '50.00' ); ?>" />
-                            <p class="description">
-                                Default pulled from Champion settings (child_order_min_amount = <?php echo esc_html( number_format( $default_min_amount, 2 ) ); ?>).
-                                If set, each created order will be adjusted to this exact total (example: 49, 50, 51).
-                                If empty, order total will be based on product price/qty meeting min amount.
-                            </p>
-                        </td>
-                    </tr>
+                            <tr>
+                                <th><label for="champion_order_total_override">Order total override (optional)</label></th>
+                                <td>
+                                    <input type="number" step="0.01" min="0" name="champion_order_total_override" id="champion_order_total_override" value="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '' ); ?>" placeholder="<?php echo esc_attr( $default_min_amount > 0 ? number_format( $default_min_amount, 2 ) : '50.00' ); ?>" />
+                                    <p class="description">
+                                        Default pulled from Champion settings (child_order_min_amount = <?php echo esc_html( number_format( $default_min_amount, 2 ) ); ?>).
+                                        If set, each created order will be adjusted to this exact total (example: 49, 50, 51).
+                                        If empty, order total will be based on product price/qty meeting min amount.
+                                    </p>
+                                </td>
+                            </tr>
 
-                    <tr>
-                        <th scope="row"><label for="champion_product_id">Product</label></th>
-                        <td>
-                            <select name="champion_product_id" id="champion_product_id">
-                                <option value="0">— Select Product —</option>
-                                <?php
-                                foreach ( $products as $product ) {
-                                    printf(
-                                        '<option value="%d">%s (ID: %d)</option>',
-                                        intval( $product->get_id() ),
-                                        esc_html( $product->get_name() ),
-                                        intval( $product->get_id() )
-                                    );
-                                }
-                                ?>
-                            </select>
-                        </td>
-                    </tr>
+                            <tr>
+                                <th><label for="champion_product_id">Product</label></th>
+                                <td>
+                                    <select name="champion_product_id" id="champion_product_id" style="min-width: 250px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                                        <option value="0">— Select Product —</option>
+                                        <?php
+                                        foreach ( $products as $product ) {
+                                            printf(
+                                                '<option value="%d">%s (ID: %d)</option>',
+                                                intval( $product->get_id() ),
+                                                esc_html( $product->get_name() ),
+                                                intval( $product->get_id() )
+                                            );
+                                        }
+                                        ?>
+                                    </select>
+                                </td>
+                            </tr>
 
-                    </tbody>
-                </table>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-                <p>
+                <div class="champion-submit-area">
                     <button type="submit" class="button button-primary" name="champion_dev_action" value="create">
                         Create test child ambassadors & orders
                     </button>
@@ -251,10 +428,7 @@ class Champion_Dev_Test_Page {
                             onclick="return confirm('This will delete test users/orders created by this tool and clear milestone/counter tables. Continue?');">
                         Clear Test Data
                     </button>
-                </p>
-
-                
-
+                </div>
             </form>
 
             <form method="post" style="margin-top:20px;">
@@ -265,16 +439,15 @@ class Champion_Dev_Test_Page {
                 </button>
             </form>
 
-
-            <hr />
-
-                <h2>What this tool does</h2>
+            <div class="champion-info-box">
+                <h3>📋 What this tool does</h3>
                 <ol>
                     <li>Creates N child ambassador users (role + meta).</li>
                     <li>Links them to the selected parent via <code>champion_parent_ambassador</code>.</li>
                     <li>Adds them to parent meta <code>champion_referred_ambassadors</code> (dashboard reflects immediately).</li>
                     <li>Creates completed WooCommerce orders per child (fires status hooks).</li>
                 </ol>
+            </div>
 
         </div>
         <?php

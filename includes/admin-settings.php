@@ -365,49 +365,56 @@ class Champion_Admin {
                                 <th>Commission payout method</th>
                                 <td>
                                     <select name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[customer_commission_payout_method]">
-                                        <option value="coupon" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'coupon'); ?>>Discount Coupon</option>
+                                       
+                                        <!-- <option value="coupon" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'coupon'); ?>>Discount Coupon</option> -->
+                                        
                                         <option value="wployalty" <?php selected($opts['customer_commission_payout_method'] ?? 'coupon', 'wployalty'); ?>>WPLoyalty Points</option>
                                     </select>
                                     <p class="description">How commissions are paid out to customers</p>
                                 </td>
                             </tr>
 
-                            <tr class="row-separator">
-                                <td colspan="2" style="padding: 12px 0; border-top: 2px solid #b5b5b5;"></td>
-                            </tr>
+                        </table>
+                    </div>
+                </div>
 
-                            <tr class="section-title">
-                                <td colspan="2" style="padding: 10px 0; font-weight: 600; font-size: 1.3em; color: #1d2327;">Customer to Customer Referral Bonus Settings</td>
-                            </tr>
-
+                <!-- Customer to Customer Referral Bonus Settings -->
+                <div class="champion-section commission">
+                    <div class="champion-section-header">
+                        <span class="champion-section-header-icon">🎁</span>
+                        <span>Customer to Customer Referral Bonus Settings</span>
+                    </div>
+                    <div class="champion-section-content">
+                        <p style="color: #666; margin-top: 0;">Settings for customer-to-customer referral milestone bonuses</p>
+                        <table class="champion-settings-table">
                             <tr>
                                 <th>Customer min order amount</th>
                                 <td>
-                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_order_min_amount]" value="<?php echo esc_attr($options['child_customer_order_min_amount']); ?>" />
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_order_min_amount]" value="<?php echo esc_attr($options['child_customer_order_min_amount']); ?>" />
+                                    <p class="description">Minimum order amount required for customer orders to qualify</p>
                                 </td>
                             </tr>
-
                             <tr>
                                 <th>Required customer order</th>
                                 <td>
-                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_required_order]" value="<?php echo esc_attr($options['child_customer_required_order']); ?>" />
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_required_order]" value="<?php echo esc_attr($options['child_customer_required_order']); ?>" />
+                                    <p class="description">Number of orders each customer must place to qualify</p>
                                 </td>
                             </tr>
-
                             <tr>
                                 <th>Customer block size</th>
                                 <td>
-                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_block_size]" value="<?php echo esc_attr($options['child_customer_block_size']); ?>" />
+                                    <input type="number" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_block_size]" value="<?php echo esc_attr($options['child_customer_block_size']); ?>" />
+                                    <p class="description">Number of qualifying customers required for bonus</p>
                                 </td>
                             </tr>
-
                             <tr>
                                 <th>Customer bonus amount</th>
                                 <td>
-                                    <input name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_bonus_amount]" value="<?php echo esc_attr($options['child_customer_bonus_amount']); ?>" />
+                                    <input type="number" step="0.01" name="<?php echo Champion_Helpers::instance()::OPT_KEY; ?>[child_customer_bonus_amount]" value="<?php echo esc_attr($options['child_customer_bonus_amount']); ?>" />
+                                    <p class="description">Bonus amount awarded when milestone is reached</p>
                                 </td>
                             </tr>
-
                         </table>
                     </div>
                 </div>
@@ -418,9 +425,11 @@ class Champion_Admin {
                 </div>
             </form>
             
-            <h2>Milestones (recent)</h2>
             <?php
+            /*
+            // Milestones (recent) - Commented out
             if ( ! empty($milestones) ) {
+                echo '<h2>Milestones (recent)</h2>';
                 echo '<table class="widefat"><thead><tr><th>ID</th><th>Parent</th><th>Amount</th><th>Block</th><th>Awarded at</th><th>Coupon</th><th>Action</th></tr></thead><tbody>';
                 foreach ($milestones as $r) {
                     $coupon_link = $r->coupon_id ? ('<a href="'.admin_url('post.php?post='.$r->coupon_id.'&action=edit').'">#'.$r->coupon_id.'</a>') : '—';
@@ -437,13 +446,13 @@ class Champion_Admin {
                 }
                 echo '</tbody></table>';
             } else {
+                echo '<h2>Milestones (recent)</h2>';
                 echo '<p>No milestones yet.</p>';
             }
-            ?>
 
-            <h2>Child Counters (recent)</h2>
-            <?php
+            // Child Counters (recent) - Commented out
             if ( ! empty($counters) ) {
+                echo '<h2>Child Counters (recent)</h2>';
                 echo '<table class="widefat"><thead><tr><th>ID</th><th>Child</th><th>Parent</th><th>Count</th><th>Last order</th></tr></thead><tbody>';
                 foreach ($counters as $c) {
                     echo '<tr>';
@@ -456,8 +465,10 @@ class Champion_Admin {
                 }
                 echo '</tbody></table>';
             } else {
+                echo '<h2>Child Counters (recent)</h2>';
                 echo '<p>No child counters yet.</p>';
             }
+            */
             ?>
         </div>
         <?php
