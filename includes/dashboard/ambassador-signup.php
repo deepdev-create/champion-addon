@@ -65,9 +65,18 @@ function champion_resolve_invite_parent( $invite_raw ) {
  */
 function champion_render_ambassador_register() {
 
+    // Only redirect if user is already an ambassador (not just any logged-in user)
+    // This allows admins and regular users to view the page
     if ( is_user_logged_in() ) {
-        wp_safe_redirect( site_url( '/my-account/champion-dashboard/' ) );
-        exit;
+        $current_user_id = get_current_user_id();
+        $is_ambassador = apply_filters( 'champion_is_user_ambassador', false, $current_user_id );
+        
+        // If already an ambassador, redirect to dashboard
+        if ( $is_ambassador ) {
+            wp_safe_redirect( site_url( '/my-account/champion-dashboard/' ) );
+            exit;
+        }
+        // If not an ambassador but logged in, allow them to view/register (they might want to become ambassador)
     }
 
     $error      = '';

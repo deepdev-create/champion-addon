@@ -106,12 +106,26 @@ class Champion_Customer_Commission {
 
         // 1) From our customer referral modules
         $amb = (int) $order->get_meta( 'champion_customer_ref_ambassador_id', true );
-        if ( $amb > 0 ) return $amb;
+        if ( $amb > 0 ) {
+            // Check if this is a child ambassador - if so, commission goes to parent
+            $parent_amb = $this->get_parent_ambassador_for_commission( $amb );
+            if ( $parent_amb > 0 ) {
+                return $parent_amb;
+            }
+            return $amb;
+        }
 
         // 2) From Coupon Affiliates PRO order meta via helper
         if ( class_exists('Champion_Helpers') ) {
             $amb = (int) Champion_Helpers::instance()->get_affiliate_for_order( $order );
-            if ( $amb > 0 ) return $amb;
+            if ( $amb > 0 ) {
+                // Check if this is a child ambassador - if so, commission goes to parent
+                $parent_amb = $this->get_parent_ambassador_for_commission( $amb );
+                if ( $parent_amb > 0 ) {
+                    return $parent_amb;
+                }
+                return $amb;
+            }
         }
 
         // 3) From customer attachment (if order is tied to a user)
@@ -120,11 +134,50 @@ class Champion_Customer_Commission {
             // If method exists, check validity window. Else fallback to meta.
             if ( class_exists('Champion_Attachment') && method_exists( Champion_Attachment::instance(), 'is_customer_attached_valid' ) ) {
                 $amb = (int) Champion_Attachment::instance()->is_customer_attached_valid( $customer_id );
-                if ( $amb > 0 ) return $amb;
+                if ( $amb > 0 ) {
+                    // Check if this is a child ambassador - if so, commission goes to parent
+                    $parent_amb = $this->get_parent_ambassador_for_commission( $amb );
+                    if ( $parent_amb > 0 ) {
+                        return $parent_amb;
+                    }
+                    return $amb;
+                }
             }
 
             $amb = (int) get_user_meta( $customer_id, 'champion_attached_ambassador', true );
-            if ( $amb > 0 ) return $amb;
+            if ( $amb > 0 ) {
+                // Check if this is a child ambassador - if so, commission goes to parent
+                $parent_amb = $this->get_parent_ambassador_for_commission( $amb );
+                if ( $parent_amb > 0 ) {
+                    return $parent_amb;
+                }
+                return $amb;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Get parent ambassador for commission.
+     * If the attached ambassador is a child ambassador, return their parent.
+     * Otherwise return 0 (commission goes to the attached ambassador directly).
+     */
+    private function get_parent_ambassador_for_commission( $child_ambassador_id ) {
+        $child_ambassador_id = (int) $child_ambassador_id;
+        if ( $child_ambassador_id <= 0 ) {
+            return 0;
+        }
+
+        // Check if this ambassador is a child (has a parent)
+        $opts = class_exists('Champion_Helpers') ? Champion_Helpers::instance()->get_opts() : [];
+        $parent_meta = ! empty( $opts['parent_usermeta'] ) ? $opts['parent_usermeta'] : 'champion_parent_ambassador';
+        
+        $parent_id = (int) get_user_meta( $child_ambassador_id, $parent_meta, true );
+        
+        // Only return parent if it exists and is a valid ambassador
+        if ( $parent_id > 0 && apply_filters( 'champion_is_user_ambassador', false, $parent_id ) ) {
+            return $parent_id;
         }
 
         return 0;
